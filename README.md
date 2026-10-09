@@ -160,6 +160,12 @@ stateDiagram-v2
 - **📡 Dual API Architecture:**
   - **GraphQL (Primary):** Authenticated via `GITHUB_TOKEN` for 5,000 req/hr rate limit and batched single-query tree fetches.
   - **REST v3 (Fallback):** Works unauthenticated out of the box for public repositories.
+- **🎨 4 Accessible Visual Themes & Section 508 / WCAG Compliance:**
+  - 🌙 **Dark (Default):** Deep slate background (`#0f172a`), refined borders, and gentle accents.
+  - ☀️ **Light:** Crisp daytime layout with high contrast ($\ge 4.5:1$ contrast ratio).
+  - 🌌 **Midnight:** Oceanic navy palette with vivid cyan and sapphire accents.
+  - 👁️ **High Contrast (Section 508 / WCAG AAA):** Pure black (`#000000`) canvas, pure white (`#ffffff`) text, high-visibility borders ($\ge 7:1$ contrast ratio).
+  - **Section 508 Features:** Skip-to-content navigation links, visible focus indicator rings (`:focus-visible`), dual visual indicators (icons + text labels so information doesn't rely solely on color), semantic table headers (`scope="col"`), screen-reader labels (`.sr-only`), and `localStorage` persistence.
 - **📝 Comprehensive Activity Logging:** Colorized console logging with precise millisecond timestamps, action tags, and HTTP request tracking.
 
 ---
