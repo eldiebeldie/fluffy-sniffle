@@ -1,0 +1,21 @@
+services:
+  fluffy-sniffle:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: fluffy-sniffle:latest
+    container_name: fluffy-sniffle
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      # GitHub Personal Access Token (loaded from .env if present)
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+    volumes:
+      # Persist generated reports and cache on the host machine
+      - ./reports:/app/reports
+      # Mount config.json so configuration changes reflect without rebuilding
+      - ./config.json:/app/config.json
+

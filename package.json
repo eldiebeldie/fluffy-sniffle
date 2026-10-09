@@ -11,7 +11,9 @@
     "server": "node src/server.js",
     "cli": "node src/index.js",
     "report:html": "node src/index.js --html",
-    "report:markdown": "node src/index.js --markdown"
+    "report:markdown": "node src/index.js --markdown",
+    "docker:build": "docker build -t fluffy-sniffle .",
+    "docker:run": "docker run -d -p 3000:3000 --env-file .env -v ${PWD}/reports:/app/reports fluffy-sniffle"
   },
   "keywords": [
     "github",

@@ -1,0 +1,25 @@
+# Dependencies and logs
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Git and GitHub metadata
+.git
+.gitignore
+.github
+
+# Environment configurations (secrets)
+.env
+.env.local
+.env.*.local
+
+# Reports and cached data
+reports/*.html
+reports/*.md
+reports/.cache.json
+
+# System artifacts
+.DS_Store
+Thumbs.db
+

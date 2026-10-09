@@ -6,6 +6,7 @@
 ![Node.js](https://img.shields.io/badge/Node.js-24%2B-339933?style=for-the-badge&logo=node.js&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-5.x-000000?style=for-the-badge&logo=express&logoColor=white)
 ![GraphQL](https://img.shields.io/badge/GraphQL-Enabled-E10098?style=for-the-badge&logo=graphql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
 <br/>
@@ -246,6 +247,34 @@ node src/index.js facebook/react
 
 # Export a Markdown report:
 npm run report:markdown
+```
+
+### 🐳 Run with Docker & Docker Compose
+
+#### Option A: Docker Compose (Recommended)
+```bash
+# Start the container in background:
+docker compose up -d
+
+# View live container logs:
+docker compose logs -f
+
+# Stop the container:
+docker compose down
+```
+*Access the dashboard at `http://localhost:3000`. Reports persist in `./reports` on your host machine.*
+
+#### Option B: Docker CLI
+```bash
+# Build the production image:
+npm run docker:build
+
+# Run container with mounted reports volume:
+docker run -d -p 3000:3000 \
+  --name fluffy-sniffle \
+  --env-file .env \
+  -v ${PWD}/reports:/app/reports \
+  fluffy-sniffle
 ```
 
 ---
