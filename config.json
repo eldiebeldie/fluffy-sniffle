@@ -5,7 +5,18 @@
     {
       "owner": "expressjs",
       "repo": "express"
+    },
+    {
+      "owner": "fastify",
+      "repo": "fastify"
+    },
+    {
+      "owner": "octokit",
+      "repo": "octokit.js"
+    },
+    {
+      "owner": "sindresorhus",
+      "repo": "chalk"
     }
   ]
 }
-

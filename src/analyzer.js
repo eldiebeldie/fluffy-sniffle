@@ -84,3 +84,93 @@ export function analyzeRepository(repoData, options = {}) {
   };
 }
 
+/**
+ * Aggregates branch and PR activity across all repositories grouped by user.
+ */
+export function aggregateUserActivities(repoResults) {
+  const usersMap = new Map();
+
+  for (const repo of repoResults) {
+    // 1. Process Open PRs
+    for (const pr of repo.pullRequests) {
+      const author = pr.author || 'unknown';
+      if (!usersMap.has(author)) {
+        usersMap.set(author, {
+          username: author,
+          repositories: new Set(),
+          openPrs: [],
+          staleBranches: [],
+        });
+      }
+      const userData = usersMap.get(author);
+      userData.repositories.add(repo.fullName);
+      userData.openPrs.push({
+        repo: repo.fullName,
+        number: pr.number,
+        title: pr.title,
+        url: pr.url,
+        isDraft: pr.isDraft,
+        createdAt: pr.createdAt,
+        updatedAt: pr.updatedAt,
+        ageDays: pr.ageDays,
+        daysSinceLastUpdate: pr.daysSinceLastUpdate,
+        isStalePr: pr.isStalePr,
+      });
+    }
+
+    // 2. Process Stale Branches
+    for (const branch of repo.staleBranches) {
+      const author = branch.author || 'unknown';
+      if (!usersMap.has(author)) {
+        usersMap.set(author, {
+          username: author,
+          repositories: new Set(),
+          openPrs: [],
+          staleBranches: [],
+        });
+      }
+      const userData = usersMap.get(author);
+      userData.repositories.add(repo.fullName);
+      userData.staleBranches.push({
+        repo: repo.fullName,
+        name: branch.name,
+        daysInactive: branch.daysInactive,
+        isVeryStale: branch.isVeryStale,
+        hasOpenPr: branch.hasOpenPr,
+        lastCommitSha: branch.lastCommitSha,
+      });
+    }
+  }
+
+  // Convert map to array with computed metrics
+  const userActivities = Array.from(usersMap.values()).map((user) => {
+    const openPrsCount = user.openPrs.length;
+    const stalePrsCount = user.openPrs.filter((p) => p.isStalePr).length;
+    const draftPrsCount = user.openPrs.filter((p) => p.isDraft).length;
+    const staleBranchesCount = user.staleBranches.length;
+    const totalNeedsAttention = stalePrsCount + staleBranchesCount;
+
+    return {
+      username: user.username,
+      repositories: Array.from(user.repositories),
+      openPrsCount,
+      stalePrsCount,
+      draftPrsCount,
+      staleBranchesCount,
+      totalNeedsAttention,
+      openPrs: user.openPrs.sort((a, b) => b.ageDays - a.ageDays),
+      staleBranches: user.staleBranches.sort((a, b) => (b.daysInactive || 0) - (a.daysInactive || 0)),
+    };
+  });
+
+  // Sort by items needing attention, then total activity
+  userActivities.sort((a, b) => {
+    if (b.totalNeedsAttention !== a.totalNeedsAttention) {
+      return b.totalNeedsAttention - a.totalNeedsAttention;
+    }
+    return (b.openPrsCount + b.staleBranchesCount) - (a.openPrsCount + a.staleBranchesCount);
+  });
+
+  return userActivities;
+}
+

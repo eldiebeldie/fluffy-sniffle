@@ -3,8 +3,8 @@ import path from 'path';
 import { exec } from 'child_process';
 import chalk from 'chalk';
 import { getRepositoryHealthData, hasToken } from './github.js';
-import { analyzeRepository } from './analyzer.js';
-import { printOverviewTable, printDetailedRepo, saveMarkdownReport } from './reporter.js';
+import { analyzeRepository, aggregateUserActivities } from './analyzer.js';
+import { printOverviewTable, printDetailedRepo, printUserOverviewTable, saveMarkdownReport } from './reporter.js';
 import { saveHtmlReport } from './htmlReporter.js';
 
 function openInBrowser(filePath) {
@@ -104,6 +104,9 @@ async function main() {
     return;
   }
 
+  // Aggregate contributor activity across repositories
+  const userActivities = aggregateUserActivities(results);
+
   // Print results to terminal
   printOverviewTable(results);
 
@@ -111,9 +114,12 @@ async function main() {
     printDetailedRepo(result);
   }
 
+  // Print contributor summary to terminal
+  printUserOverviewTable(userActivities);
+
   // Generate HTML Dashboard
   if (shouldSaveHtml) {
-    const { latestPath, archivePath } = saveHtmlReport(results);
+    const { latestPath, archivePath } = saveHtmlReport(results, userActivities);
     const fileUrl = `file:///${path.resolve(latestPath).replace(/\\/g, '/')}`;
     console.log(chalk.bold.green(`\n🌐 HTML Dashboard generated:`));
     console.log(chalk.cyan(`   Latest:  ${fileUrl}`));
@@ -127,7 +133,7 @@ async function main() {
 
   // Generate Markdown report if requested
   if (shouldSaveMarkdown) {
-    const reportPath = saveMarkdownReport(results);
+    const reportPath = saveMarkdownReport(results, userActivities);
     console.log(chalk.bold.green(`\n📄 Markdown report generated: ${chalk.underline(reportPath)}`));
   }
 }

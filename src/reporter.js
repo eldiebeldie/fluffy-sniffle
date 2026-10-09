@@ -119,9 +119,46 @@ export function printDetailedRepo(res) {
 }
 
 /**
+ * Print overview table across all contributors
+ */
+export function printUserOverviewTable(userActivities) {
+  if (!userActivities || userActivities.length === 0) return;
+
+  console.log('\n' + chalk.bold.cyan('👤 Contributor Activities Overview'));
+
+  const table = new Table({
+    head: [
+      chalk.white.bold('Contributor'),
+      chalk.white.bold('Repos'),
+      chalk.white.bold('Open PRs'),
+      chalk.white.bold('Stale PRs'),
+      chalk.white.bold('Stale Branches'),
+      chalk.white.bold('Items to Review'),
+    ],
+    colAligns: ['left', 'center', 'center', 'center', 'center', 'center'],
+  });
+
+  userActivities.slice(0, 20).forEach((u) => {
+    table.push([
+      chalk.bold(u.username),
+      u.repositories.length,
+      u.openPrsCount,
+      u.stalePrsCount > 0 ? chalk.yellow(u.stalePrsCount) : chalk.green('0'),
+      u.staleBranchesCount > 0 ? chalk.red(u.staleBranchesCount) : chalk.green('0'),
+      u.totalNeedsAttention > 0 ? chalk.yellow.bold(u.totalNeedsAttention) : chalk.green('0'),
+    ]);
+  });
+
+  console.log(table.toString());
+  if (userActivities.length > 20) {
+    console.log(chalk.gray(`...and ${userActivities.length - 20} more contributors.`));
+  }
+}
+
+/**
  * Generate Markdown report file
  */
-export function saveMarkdownReport(results, outputDir = 'reports') {
+export function saveMarkdownReport(results, userActivities = [], outputDir = 'reports') {
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
@@ -140,6 +177,17 @@ export function saveMarkdownReport(results, outputDir = 'reports') {
     md += `| [${r.fullName}](https://github.com/${r.fullName}) | ${r.totalBranches} | ${r.staleBranchesCount} | ${r.totalOpenPrs} | ${r.stalePrsCount} | ${r.draftPrsCount} |\n`;
   });
   md += `\n---\n\n`;
+
+  // Contributor Activities Table
+  if (userActivities && userActivities.length > 0) {
+    md += `## 👤 Contributor Activities Overview\n\n`;
+    md += `| Contributor | Repositories | Open PRs | Stale PRs | Stale Branches | Items to Review |\n`;
+    md += `| :--- | :---: | :---: | :---: | :---: | :---: |\n`;
+    userActivities.forEach((u) => {
+      md += `| [${u.username}](https://github.com/${u.username}) | ${u.repositories.join(', ')} | ${u.openPrsCount} | ${u.stalePrsCount} | ${u.staleBranchesCount} | ${u.totalNeedsAttention} |\n`;
+    });
+    md += `\n---\n\n`;
+  }
 
   // Details per repo
   results.forEach((r) => {
