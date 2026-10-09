@@ -57,7 +57,7 @@ function saveCache(data) {
   try {
     const dir = path.dirname(cachePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(cachePath, JSON.stringify(data, null, 2), 'utf-8');
+    fs.writeFileSync(cachePath, JSON.stringify({ version: 2, ...data }, null, 2), 'utf-8');
   } catch (err) {
     logger.warn(`Could not save disk cache: ${err.message}`);
   }
@@ -70,7 +70,7 @@ function loadCache() {
   if (fs.existsSync(cachePath)) {
     try {
       const data = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
-      if (Array.isArray(data.results) && data.results.length > 0) {
+      if (data.version === 2 && Array.isArray(data.results) && data.results.length > 0) {
         return data;
       }
     } catch (err) {

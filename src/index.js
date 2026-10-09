@@ -58,6 +58,7 @@ async function main() {
   const shouldSaveMarkdown = args.includes('--markdown');
   const shouldSaveHtml = args.includes('--html') || args.includes('--open') || true;
   const shouldOpenBrowser = args.includes('--open');
+  const showAllTime = args.includes('--all-time');
 
   const cliRepos = [];
   for (const arg of args.filter((a) => !a.startsWith('--'))) {
@@ -110,7 +111,7 @@ async function main() {
   }
 
   // Print contributor summary to terminal
-  printUserOverviewTable(userActivities);
+  printUserOverviewTable(userActivities, { allTime: showAllTime });
 
   // Generate HTML Dashboard
   if (shouldSaveHtml) {
