@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { getRepositoryHealthData, hasToken } from './github.js';
 import { analyzeRepository, aggregateUserActivities } from './analyzer.js';
 import { generateHtmlReport, saveHtmlReport } from './htmlReporter.js';
+import { logger } from './logger.js';
 
 dotenv.config();
 
@@ -22,7 +23,14 @@ let isScanning = false;
 
 app.use(express.json());
 
+// Request logging middleware
+app.use((req, res, next) => {
+  logger.action('HTTP Request', `${req.method} ${req.url}`);
+  next();
+});
+
 function openInBrowser(url) {
+  logger.action('Open Browser', url);
   const startCmd =
     process.platform === 'win32'
       ? `start "" "${url}"`
@@ -32,7 +40,7 @@ function openInBrowser(url) {
 
   exec(startCmd, (err) => {
     if (err) {
-      console.log(chalk.gray(`Could not automatically launch browser: ${err.message}`));
+      logger.warn(`Could not automatically launch browser: ${err.message}`);
     }
   });
 }
@@ -45,7 +53,7 @@ function loadConfig() {
     try {
       return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     } catch (err) {
-      console.error(chalk.red(`Error reading config.json: ${err.message}`));
+      logger.error(`Error reading config.json: ${err.message}`);
     }
   }
   return { defaultStaleDays: 30, warnStaleDays: 60, repositories: [] };
@@ -56,6 +64,7 @@ function loadConfig() {
  */
 function saveConfig(config) {
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+  logger.info(`Updated ${configPath}`);
 }
 
 /**
@@ -63,18 +72,20 @@ function saveConfig(config) {
  */
 async function performScan(customRepos = null) {
   if (isScanning) {
+    logger.warn('Scan request rejected: a scan is already currently in progress.');
     throw new Error('A scan is already in progress. Please wait.');
   }
 
   isScanning = true;
-  console.log(chalk.bold.blue('\n⏳ Starting repository scan...'));
+  const startTime = Date.now();
+  logger.action('Scan Start', 'Beginning comprehensive multi-repository scan');
 
   try {
     const config = loadConfig();
     const reposToScan = customRepos || config.repositories || [];
 
     if (reposToScan.length === 0) {
-      console.log(chalk.yellow('No repositories configured to scan.'));
+      logger.warn('No repositories configured to scan.');
       cachedResults = [];
       cachedUserActivities = [];
       lastScanTime = new Date().toISOString();
@@ -83,7 +94,7 @@ async function performScan(customRepos = null) {
 
     const results = [];
     for (const { owner, repo } of reposToScan) {
-      console.log(chalk.cyan(`   Scanning ${owner}/${repo}...`));
+      logger.info(`Starting scan for ${owner}/${repo}...`);
       try {
         const rawData = await getRepositoryHealthData(owner, repo);
         const analyzed = analyzeRepository(rawData, {
@@ -92,7 +103,7 @@ async function performScan(customRepos = null) {
         });
         results.push(analyzed);
       } catch (err) {
-        console.error(chalk.red(`   Failed to scan ${owner}/${repo}: ${err.message}`));
+        logger.error(`Failed to scan ${owner}/${repo}: ${err.message}`);
       }
     }
 
@@ -102,7 +113,8 @@ async function performScan(customRepos = null) {
 
     // Persist to reports/index.html
     saveHtmlReport(cachedResults, cachedUserActivities, { lastScanTime });
-    console.log(chalk.bold.green('✔ Scan finished successfully!\n'));
+    const elapsedMs = Date.now() - startTime;
+    logger.success(`Multi-repo scan completed in ${elapsedMs}ms (${results.length} repos analyzed)`);
 
     return {
       results: cachedResults,
@@ -122,6 +134,7 @@ async function performScan(customRepos = null) {
  * Main dashboard view
  */
 app.get('/', (req, res) => {
+  logger.info('Rendering dashboard for client request');
   const html = generateHtmlReport(cachedResults, cachedUserActivities, { lastScanTime });
   res.setHeader('Content-Type', 'text/html');
   res.send(html);
@@ -131,10 +144,13 @@ app.get('/', (req, res) => {
  * API: Trigger scan on-demand
  */
 app.post('/api/scan', async (req, res) => {
+  logger.action('API Trigger', 'POST /api/scan requested by user');
   try {
     const data = await performScan();
+    logger.success(`POST /api/scan finished: ${data.results.length} repos updated`);
     res.json({ success: true, ...data });
   } catch (err) {
+    logger.error(`POST /api/scan failed: ${err.message}`);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -166,9 +182,11 @@ app.post('/api/repos', async (req, res) => {
   try {
     const { owner, repo } = req.body;
     if (!owner || !repo) {
+      logger.warn('POST /api/repos missing owner or repo in body');
       return res.status(400).json({ error: 'Owner and repo are required (e.g. { owner: "facebook", repo: "react" })' });
     }
 
+    logger.action('Add Repository', `${owner}/${repo}`);
     const config = loadConfig();
     config.repositories = config.repositories || [];
 
@@ -179,13 +197,16 @@ app.post('/api/repos', async (req, res) => {
     if (!exists) {
       config.repositories.push({ owner: owner.trim(), repo: repo.trim() });
       saveConfig(config);
-      console.log(chalk.green(`➕ Added repository: ${owner}/${repo}`));
+      logger.success(`Added repository ${owner}/${repo} to config.json`);
+    } else {
+      logger.info(`Repository ${owner}/${repo} is already in config.json`);
     }
 
     // Trigger scan with newly added repo
     const scanData = await performScan();
     res.json({ success: true, repositories: config.repositories, ...scanData });
   } catch (err) {
+    logger.error(`POST /api/repos error: ${err.message}`);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -196,16 +217,18 @@ app.post('/api/repos', async (req, res) => {
 app.delete('/api/repos/:owner/:repo', async (req, res) => {
   try {
     const { owner, repo } = req.params;
+    logger.action('Remove Repository', `${owner}/${repo}`);
     const config = loadConfig();
     config.repositories = (config.repositories || []).filter(
       (r) => !(r.owner.toLowerCase() === owner.toLowerCase() && r.repo.toLowerCase() === repo.toLowerCase())
     );
     saveConfig(config);
-    console.log(chalk.yellow(`➖ Removed repository: ${owner}/${repo}`));
+    logger.success(`Removed repository ${owner}/${repo} from config.json`);
 
     const scanData = await performScan();
     res.json({ success: true, repositories: config.repositories, ...scanData });
   } catch (err) {
+    logger.error(`DELETE /api/repos error: ${err.message}`);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -216,21 +239,19 @@ app.delete('/api/repos/:owner/:repo', async (req, res) => {
 app.listen(PORT, async () => {
   const url = `http://localhost:${PORT}`;
   console.log(chalk.bold.magenta('\n🚀 GitHub Health Dashboard Server is running!'));
-  console.log(chalk.cyan(`   URL: ${chalk.underline(url)}`));
-  console.log(chalk.gray(`   Press Ctrl+C to stop.\n`));
+  logger.success(`Server active at ${chalk.underline(url)}`);
+  logger.info('Press Ctrl+C to stop.\n');
 
   if (!hasToken) {
-    console.log(
-      chalk.yellow('⚠️  Notice: GITHUB_TOKEN not set. Running with unauthenticated GitHub REST API.')
-    );
-    console.log(chalk.gray('   Add GITHUB_TOKEN to .env for higher rate limits and fast GraphQL queries.\n'));
+    logger.warn('GITHUB_TOKEN not detected in .env. Running with unauthenticated GitHub REST API.');
+    logger.info('Add GITHUB_TOKEN to .env for 5,000 req/hr rate limits and fast GraphQL queries.\n');
   }
 
   // Perform initial scan
   try {
     await performScan();
   } catch (err) {
-    console.error(chalk.red(`Initial scan error: ${err.message}`));
+    logger.error(`Initial scan error: ${err.message}`);
   }
 
   // Open in browser if requested
@@ -239,4 +260,3 @@ app.listen(PORT, async () => {
     openInBrowser(url);
   }
 });
-

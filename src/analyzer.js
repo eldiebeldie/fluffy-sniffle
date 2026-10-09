@@ -1,3 +1,5 @@
+import { logger } from './logger.js';
+
 /**
  * Analyzes repository data to detect stale branches and PR status.
  */
@@ -6,6 +8,8 @@ export function analyzeRepository(repoData, options = {}) {
     staleDaysThreshold = 30,
     warnStaleDays = 60,
   } = options;
+
+  logger.action('Analyze Repository', `${repoData.fullName} (stale threshold: ${staleDaysThreshold}d, warning: ${warnStaleDays}d)`);
 
   const now = new Date();
   const defaultBranch = repoData.defaultBranch;
@@ -67,6 +71,10 @@ export function analyzeRepository(repoData, options = {}) {
   const draftPrsCount = analyzedPrs.filter((pr) => pr.isDraft).length;
   const stalePrsCount = analyzedPrs.filter((pr) => pr.isStalePr).length;
 
+  logger.info(
+    `[${repoData.fullName}] Identified ${staleBranches.length} stale branches (${staleBranches.filter(b => b.isVeryStale).length} >= ${warnStaleDays}d) and ${stalePrsCount} stale PRs out of ${analyzedPrs.length} total open PRs`
+  );
+
   return {
     fullName: repoData.fullName,
     defaultBranch,
@@ -88,6 +96,8 @@ export function analyzeRepository(repoData, options = {}) {
  * Aggregates branch and PR activity across all repositories grouped by user.
  */
 export function aggregateUserActivities(repoResults) {
+  logger.action('Aggregate Contributor Activities', `Scanning ${repoResults.length} repositories for user contributions...`);
+
   const usersMap = new Map();
 
   for (const repo of repoResults) {
@@ -171,6 +181,10 @@ export function aggregateUserActivities(repoResults) {
     return (b.openPrsCount + b.staleBranchesCount) - (a.openPrsCount + a.staleBranchesCount);
   });
 
+  const needingAttention = userActivities.filter((u) => u.totalNeedsAttention > 0).length;
+  logger.success(
+    `Aggregated activities for ${userActivities.length} contributors (${needingAttention} with pending items to review)`
+  );
+
   return userActivities;
 }
-

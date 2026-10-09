@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { logger } from './logger.js';
 
 /**
  * Escapes HTML characters
@@ -1230,7 +1231,10 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       container.innerHTML = html;
     }
 
+    console.log('[Dashboard] Loaded with', DASHBOARD_DATA.results.length, 'repositories and', DASHBOARD_DATA.userActivities.length, 'contributors.');
+
     function clearSearch() {
+      console.log('[Dashboard:Search] Cleared search. Returning to view:', previousView);
       const input = document.getElementById('searchInput');
       input.value = '';
       document.getElementById('searchClearBtn').style.display = 'none';
@@ -1248,9 +1252,11 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     window.addEventListener('keydown', (e) => {
       if (e.key === '/' && document.activeElement !== searchInput && document.activeElement.tagName !== 'INPUT') {
         e.preventDefault();
+        console.log('[Dashboard:Shortcut] Pressed / to focus search input');
         searchInput.focus();
         searchInput.select();
       } else if (e.key === 'Escape' && document.activeElement === searchInput) {
+        console.log('[Dashboard:Shortcut] Pressed Escape to clear search');
         clearSearch();
         searchInput.blur();
       }
@@ -1277,10 +1283,12 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     // Trigger Scan via Server API
     async function triggerScan() {
       if (window.location.protocol === 'file:') {
+        console.warn('[Dashboard:Scan] Trigger failed: page opened via file:// protocol.');
         alert('To trigger scans directly from the browser, please run the project server using: npm start');
         return;
       }
 
+      console.log('[Dashboard:Action] Triggering repository health scan via POST /api/scan...');
       const btn = document.getElementById('triggerScanBtn');
       const icon = document.getElementById('scanBtnIcon');
       const text = document.getElementById('scanBtnText');
@@ -1293,6 +1301,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       try {
         const res = await fetch('/api/scan', { method: 'POST' });
         const data = await res.json();
+        console.log('[Dashboard:API] POST /api/scan response:', data);
         if (!res.ok || !data.success) {
           throw new Error(data.error || 'Scan failed');
         }
@@ -1301,6 +1310,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
           window.location.reload();
         }, 600);
       } catch (err) {
+        console.error('[Dashboard:API] Scan error:', err);
         showToast('❌ Scan failed: ' + err.message, 'error');
         btn.disabled = false;
         icon.classList.remove('spinning');
@@ -1311,6 +1321,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     // Add Repository via Server API
     async function handleAddRepo() {
       if (window.location.protocol === 'file:') {
+        console.warn('[Dashboard:Repo] Add repo failed: page opened via file:// protocol.');
         alert('To add repositories dynamically, please run the project server using: npm start');
         return;
       }
@@ -1323,6 +1334,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       }
 
       const [owner, repo] = repoStr.split('/');
+      console.log('[Dashboard:Action] Adding repository via POST /api/repos:', repoStr);
       input.disabled = true;
       showToast('Adding ' + repoStr + ' and starting scan...', 'info');
 
@@ -1333,11 +1345,13 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
           body: JSON.stringify({ owner, repo })
         });
         const data = await res.json();
+        console.log('[Dashboard:API] POST /api/repos response:', data);
         if (!res.ok) throw new Error(data.error || 'Failed to add repo');
         showToast('✔ Repository added! Refreshing...', 'success');
         input.value = '';
         setTimeout(() => window.location.reload(), 600);
       } catch (err) {
+        console.error('[Dashboard:API] Add repo error:', err);
         showToast('❌ Failed: ' + err.message, 'error');
       } finally {
         input.disabled = false;
@@ -1361,16 +1375,19 @@ export function saveHtmlReport(results, userActivities = [], metadata = {}, outp
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
+  logger.action('Generate HTML Dashboard', `Rendering dashboard for ${results.length} repos and ${userActivities.length} contributors`);
   const html = generateHtmlReport(results, userActivities, metadata);
 
   // 1. Save timestamped archive
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const archivePath = path.join(outputDir, `repo-health-${dateStr}.html`);
   fs.writeFileSync(archivePath, html, 'utf-8');
+  logger.info(`Saved HTML report archive: ${archivePath}`);
 
   // 2. Save latest dashboard (index.html)
   const latestPath = path.join(outputDir, 'index.html');
   fs.writeFileSync(latestPath, html, 'utf-8');
+  logger.success(`Updated primary dashboard: ${latestPath} (${html.length} bytes)`);
 
   return { latestPath, archivePath };
 }

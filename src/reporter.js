@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import Table from 'cli-table3';
 import fs from 'fs';
 import path from 'path';
+import { logger } from './logger.js';
 
 /**
  * Print overview table across all repositories
@@ -222,6 +223,8 @@ export function saveMarkdownReport(results, userActivities = [], outputDir = 're
   });
 
   fs.writeFileSync(filePath, md, 'utf-8');
+  logger.action('Save Markdown Report', filePath);
+  logger.success(`Markdown report successfully written (${md.length} characters)`);
   return filePath;
 }
 
