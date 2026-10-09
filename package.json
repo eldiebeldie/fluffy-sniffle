@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.js --open",
+    "dev": "node --watch --watch-path=src --watch-path=config.json src/server.js --open --dev",
+    "dev:no-open": "node --watch --watch-path=src --watch-path=config.json src/server.js --dev",
     "server": "node src/server.js",
     "cli": "node src/index.js",
     "report:html": "node src/index.js --html",
