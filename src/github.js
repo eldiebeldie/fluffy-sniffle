@@ -211,3 +211,40 @@ export async function getRepositoryHealthData(owner, repo) {
     throw err;
   }
 }
+
+/**
+ * Safely parse and sanitize repository input string or URL
+ */
+export function parseRepoString(input) {
+  if (!input || typeof input !== 'string') return null;
+  let str = input.trim();
+  // Strip protocol and domain if full URL provided
+  str = str.replace(/^(https?:\/\/)?(www\.)?github\.com\//i, '');
+  // Strip trailing slashes and .git
+  str = str.replace(/\.git$/i, '').replace(/\/+$/, '');
+
+  // Detect GitHub Topic URLs (e.g. github.com/topics/weather or topics/weather)
+  if (str.toLowerCase().startsWith('topics/')) {
+    throw new Error(
+      `"${input}" is a GitHub Topic category, not a repository. Please enter a valid repository (e.g. "facebook/react" or "expressjs/express").`
+    );
+  }
+
+  const parts = str.split('/');
+  if (parts.length !== 2 || !parts[0].trim() || !parts[1].trim()) {
+    throw new Error(
+      `Invalid repository format "${input}". Expected "owner/repo" (e.g. "facebook/react" or "https://github.com/facebook/react").`
+    );
+  }
+
+  const owner = parts[0].trim();
+  const repo = parts[1].trim();
+
+  // Basic GitHub naming rules check
+  if (!/^[a-zA-Z0-9_.-]+$/.test(owner) || !/^[a-zA-Z0-9_.-]+$/.test(repo)) {
+    throw new Error(`Repository name contains invalid characters: "${owner}/${repo}"`);
+  }
+
+  return { owner, repo };
+}
+

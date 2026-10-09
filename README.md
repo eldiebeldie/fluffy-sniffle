@@ -213,7 +213,18 @@ Configure stale thresholds and your target repositories in `config.json`:
 
 ## 📖 Usage
 
-### 🌐 Launch the Interactive Web Dashboard (Recommended)
+### ⚡ Live Auto-Reload Dev Server (Development Mode)
+```bash
+npm run dev
+```
+*Starts the dev server with live auto-reload enabled! Watches all code in `src/` and `config.json`. When you modify styles, templates, or configuration, the browser re-renders automatically in ~300ms without manual refreshing.*
+
+```bash
+# Start dev server without auto-opening browser:
+npm run dev:no-open
+```
+
+### 🌐 Launch the Interactive Web Dashboard (Production Mode)
 ```bash
 npm start
 ```

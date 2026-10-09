@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 import chalk from 'chalk';
-import { getRepositoryHealthData, hasToken } from './github.js';
+import { getRepositoryHealthData, parseRepoString, hasToken } from './github.js';
 import { analyzeRepository, aggregateUserActivities } from './analyzer.js';
 import { printOverviewTable, printDetailedRepo, printUserOverviewTable, saveMarkdownReport } from './reporter.js';
 import { saveHtmlReport } from './htmlReporter.js';
@@ -59,12 +59,15 @@ async function main() {
   const shouldSaveHtml = args.includes('--html') || args.includes('--open') || true;
   const shouldOpenBrowser = args.includes('--open');
 
-  const cliRepos = args
-    .filter((arg) => !arg.startsWith('--') && arg.includes('/'))
-    .map((arg) => {
-      const [owner, repo] = arg.split('/');
-      return { owner, repo };
-    });
+  const cliRepos = [];
+  for (const arg of args.filter((a) => !a.startsWith('--'))) {
+    try {
+      const parsed = parseRepoString(arg);
+      if (parsed) cliRepos.push(parsed);
+    } catch (err) {
+      logger.warn(`Skipping invalid repository argument "${arg}": ${err.message}`);
+    }
+  }
 
   const reposToScan = cliRepos.length > 0 ? cliRepos : config.repositories;
 

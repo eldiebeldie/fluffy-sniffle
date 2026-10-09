@@ -702,7 +702,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     <header role="banner">
       <div class="header-title">
         <h1>📊 GitHub Health & Contributor Dashboard</h1>
-        <p id="lastScannedText">Last scanned: ${escapeHtml(generatedAt)}</p>
+        <p id="lastScannedText">Last scanned: ${escapeHtml(generatedAt)} ${metadata.isDev ? `<span class="badge" style="background: rgba(35, 134, 54, 0.15); border: 1px solid var(--success); color: var(--success); font-weight: 600; padding: 2px 8px; border-radius: 6px; font-size: 11px; margin-left: 8px;">⚡ LIVE RELOAD ACTIVE</span>` : ''}</p>
       </div>
 
       <div class="controls" role="toolbar" aria-label="Dashboard Controls">
@@ -735,6 +735,21 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
         </div>
       </div>
     </header>
+
+    ${metadata.failedRepos && metadata.failedRepos.length > 0 ? `
+      <div class="alert-banner" role="alert" style="background: rgba(218, 54, 51, 0.15); border: 1px solid var(--danger); color: var(--header-text); padding: 14px 18px; border-radius: 8px; margin-bottom: 24px;">
+        <div style="font-weight: 600; font-size: 15px; margin-bottom: 4px;">⚠️ Unreachable Repositories (${metadata.failedRepos.length})</div>
+        <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">The following repositories configured in <code>config.json</code> could not be resolved or fetched from GitHub:</div>
+        <ul style="margin: 0 0 6px 20px; font-size: 13px;">
+          ${metadata.failedRepos.map((f) => `
+            <li style="margin-bottom: 4px;">
+              <strong>${escapeHtml(f.owner)}/${escapeHtml(f.repo)}</strong>: ${escapeHtml(f.error)}
+              <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 11px; margin-left: 8px; cursor: pointer;" onclick="handleRemoveRepo('${escapeHtml(f.owner)}/${escapeHtml(f.repo)}')">Remove from Config</button>
+            </li>
+          `).join('')}
+        </ul>
+      </div>
+    ` : ''}
 
     <!-- Top View Switcher Tabs -->
     <nav class="view-switcher" id="mainViewSwitcher" role="tablist" aria-label="Dashboard Views">
@@ -816,11 +831,12 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                 <th scope="col" style="text-align: center;">Inactive PRs</th>
                 <th scope="col" style="text-align: center;">Draft PRs</th>
                 <th scope="col" style="text-align: center;">Health Status</th>
+                <th scope="col" style="text-align: center;">Action</th>
               </tr>
             </thead>
             <tbody>
               ${results.length === 0 ? `
-                <tr><td colspan="7" class="empty-state">No repositories analyzed yet. Click "Run Report Now" above!</td></tr>
+                <tr><td colspan="8" class="empty-state">No repositories analyzed yet. Click "Run Report Now" above!</td></tr>
               ` : results.map((r) => {
                 let badgeClass = 'badge-healthy';
                 let badgeLabel = '✔ Healthy';
@@ -845,6 +861,9 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                     </td>
                     <td style="text-align: center;">${r.draftPrsCount}</td>
                     <td style="text-align: center;"><span class="badge ${badgeClass}">${badgeLabel}</span></td>
+                    <td style="text-align: center;">
+                      <button class="btn btn-secondary" style="padding: 2px 7px; font-size: 11px; cursor: pointer;" onclick="handleRemoveRepo('${escapeHtml(r.fullName)}')" title="Stop tracking ${escapeHtml(r.fullName)}" aria-label="Remove repository ${escapeHtml(r.fullName)}">🗑️</button>
+                    </td>
                   </tr>
                 `;
               }).join('')}
@@ -868,6 +887,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                 <div>
                   <span class="badge badge-tag">default: ${escapeHtml(r.defaultBranch)}</span>
                   <span class="badge badge-tag">${r.isPrivate ? 'Private' : 'Public'}</span>
+                  <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-left: 8px; cursor: pointer;" onclick="handleRemoveRepo('${escapeHtml(r.fullName)}')" aria-label="Remove repository ${escapeHtml(r.fullName)}">🗑️ Remove</button>
                 </div>
               </div>
 
@@ -1520,6 +1540,34 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       }
     }
 
+    // Remove Repository via Server API
+    async function handleRemoveRepo(fullName) {
+      if (window.location.protocol === 'file:') {
+        alert('To manage repositories dynamically, please run the project server using: npm start');
+        return;
+      }
+      if (!confirm('Are you sure you want to stop tracking "' + fullName + '"?')) {
+        return;
+      }
+
+      const [owner, repo] = fullName.split('/');
+      showToast('Removing ' + fullName + '...', 'info');
+      try {
+        const res = await fetch('/api/repos/' + encodeURIComponent(owner) + '/' + encodeURIComponent(repo), {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to remove repository');
+        }
+        showToast('✔ Removed ' + fullName + '! Refreshing...', 'success');
+        setTimeout(() => window.location.reload(), 600);
+      } catch (err) {
+        console.error('[Dashboard:API] Remove repo error:', err);
+        showToast('❌ ' + err.message, 'error');
+      }
+    }
+
     // Add Repository via Server API
     async function handleAddRepo() {
       if (window.location.protocol === 'file:') {
@@ -1529,34 +1577,39 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       }
 
       const input = document.getElementById('newRepoInput');
+      const addBtn = document.getElementById('addRepoBtn');
       const repoStr = input.value.trim();
-      if (!repoStr || !repoStr.includes('/')) {
-        alert('Please enter a repository in owner/repo format (e.g. facebook/react)');
+      if (!repoStr) {
+        showToast('Please enter a repository (e.g. facebook/react or github.com/facebook/react)', 'error');
+        input.focus();
         return;
       }
 
-      const [owner, repo] = repoStr.split('/');
       console.log('[Dashboard:Action] Adding repository via POST /api/repos:', repoStr);
       input.disabled = true;
-      showToast('Adding ' + repoStr + ' and starting scan...', 'info');
+      if (addBtn) addBtn.disabled = true;
+      showToast('Verifying ' + repoStr + ' on GitHub...', 'info');
 
       try {
         const res = await fetch('/api/repos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ owner, repo })
+          body: JSON.stringify({ repoStr })
         });
         const data = await res.json();
         console.log('[Dashboard:API] POST /api/repos response:', data);
-        if (!res.ok) throw new Error(data.error || 'Failed to add repo');
-        showToast('✔ Repository added! Refreshing...', 'success');
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to add repository');
+        }
+        showToast('✔ Repository verified & added! Refreshing...', 'success');
         input.value = '';
         setTimeout(() => window.location.reload(), 600);
       } catch (err) {
         console.error('[Dashboard:API] Add repo error:', err);
-        showToast('❌ Failed: ' + err.message, 'error');
+        showToast('❌ ' + err.message, 'error');
       } finally {
         input.disabled = false;
+        if (addBtn) addBtn.disabled = false;
       }
     }
 
@@ -1564,6 +1617,54 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     document.getElementById('newRepoInput').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') handleAddRepo();
     });
+
+    // Live Auto-Reload Stream Client
+    (function initLiveReload() {
+      if (window.location.protocol === 'file:') return;
+
+      let isReconnecting = false;
+      let reconnectInterval = null;
+
+      function connect() {
+        const es = new EventSource('/api/live-reload');
+
+        es.addEventListener('connected', () => {
+          if (isReconnecting) {
+            console.log('[DevServer:LiveReload] Reconnected to server. Reloading page...');
+            window.location.reload();
+          } else {
+            console.log('[DevServer:LiveReload] Live auto-reload stream connected.');
+          }
+        });
+
+        es.addEventListener('reload', (e) => {
+          console.log('[DevServer:LiveReload] Reload event received:', e.data);
+          window.location.reload();
+        });
+
+        es.onerror = () => {
+          es.close();
+          isReconnecting = true;
+          if (!reconnectInterval) {
+            reconnectInterval = setInterval(async () => {
+              try {
+                const res = await fetch('/api/data', { method: 'GET', cache: 'no-store' });
+                if (res.ok) {
+                  clearInterval(reconnectInterval);
+                  reconnectInterval = null;
+                  console.log('[DevServer:LiveReload] Dev server back online. Reloading page...');
+                  window.location.reload();
+                }
+              } catch {
+                // Server still restarting...
+              }
+            }, 250);
+          }
+        };
+      }
+
+      connect();
+    })();
   </script>
 </body>
 </html>`;
