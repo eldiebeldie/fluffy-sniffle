@@ -6,8 +6,10 @@ import { getRepositoryHealthData, hasToken } from './github.js';
 import { analyzeRepository, aggregateUserActivities } from './analyzer.js';
 import { printOverviewTable, printDetailedRepo, printUserOverviewTable, saveMarkdownReport } from './reporter.js';
 import { saveHtmlReport } from './htmlReporter.js';
+import { logger } from './logger.js';
 
 function openInBrowser(filePath) {
+  logger.action('Open Browser', filePath);
   const fullPath = path.resolve(filePath);
   const startCmd =
     process.platform === 'win32'
@@ -18,7 +20,7 @@ function openInBrowser(filePath) {
 
   exec(startCmd, (err) => {
     if (err) {
-      console.log(chalk.gray(`Could not automatically launch browser: ${err.message}`));
+      logger.warn(`Could not launch browser: ${err.message}`);
     }
   });
 }
@@ -27,18 +29,10 @@ async function main() {
   console.log(chalk.bold.magenta('\n🔍 GitHub Stale Branches & PR Status Checker'));
 
   if (!hasToken) {
-    console.log(
-      chalk.yellow(
-        '⚠️  Notice: GITHUB_TOKEN not found in environment. Running with unauthenticated REST API.'
-      )
-    );
-    console.log(
-      chalk.gray(
-        '   To increase rate limits and use fast GraphQL queries, add GITHUB_TOKEN to your .env file.\n'
-      )
-    );
+    logger.warn('GITHUB_TOKEN not found in environment. Running with unauthenticated REST API.');
+    logger.info('To increase rate limits and use fast GraphQL queries, add GITHUB_TOKEN to .env\n');
   } else {
-    console.log(chalk.green('🔑 GitHub Token detected. Using authenticated GraphQL API.\n'));
+    logger.success('GitHub Token detected. Using authenticated GraphQL API.\n');
   }
 
   // Read config
@@ -52,8 +46,9 @@ async function main() {
   if (fs.existsSync(configPath)) {
     try {
       config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      logger.info(`Loaded configuration from ${configPath} (${(config.repositories || []).length} repositories configured)`);
     } catch (err) {
-      console.error(chalk.red(`Failed to parse config.json: ${err.message}`));
+      logger.error(`Failed to parse config.json: ${err.message}`);
       process.exit(1);
     }
   }
@@ -61,7 +56,7 @@ async function main() {
   // Check command line arguments
   const args = process.argv.slice(2);
   const shouldSaveMarkdown = args.includes('--markdown');
-  const shouldSaveHtml = args.includes('--html') || args.includes('--open') || true; // always generate html dashboard
+  const shouldSaveHtml = args.includes('--html') || args.includes('--open') || true;
   const shouldOpenBrowser = args.includes('--open');
 
   const cliRepos = args
@@ -74,17 +69,15 @@ async function main() {
   const reposToScan = cliRepos.length > 0 ? cliRepos : config.repositories;
 
   if (!reposToScan || reposToScan.length === 0) {
-    console.log(
-      chalk.red('No repositories configured. Add repos to config.json or pass owner/repo as an argument.')
-    );
-    console.log(chalk.gray('Example: npm start facebook/react\n'));
+    logger.error('No repositories configured. Add repos to config.json or pass owner/repo as an argument.');
+    console.log(chalk.gray('Example: npm run cli expressjs/express\n'));
     process.exit(1);
   }
 
+  logger.action('CLI Scan Started', `Scanning ${reposToScan.length} repositories...`);
   const results = [];
 
   for (const { owner, repo } of reposToScan) {
-    process.stdout.write(chalk.blue(`⏳ Analyzing ${chalk.bold(`${owner}/${repo}`)}... `));
     try {
       const rawData = await getRepositoryHealthData(owner, repo);
       const analyzed = analyzeRepository(rawData, {
@@ -92,15 +85,14 @@ async function main() {
         warnStaleDays: config.warnStaleDays || 60,
       });
       results.push(analyzed);
-      process.stdout.write(chalk.green('Done!\n'));
+      logger.success(`Processed repository ${owner}/${repo}`);
     } catch (err) {
-      process.stdout.write(chalk.red('Failed!\n'));
-      console.error(chalk.red(`   Error: ${err.message}`));
+      logger.error(`Failed processing ${owner}/${repo}: ${err.message}`);
     }
   }
 
   if (results.length === 0) {
-    console.log(chalk.red('\nNo repository data could be retrieved.'));
+    logger.error('No repository data could be retrieved.');
     return;
   }
 
@@ -126,7 +118,6 @@ async function main() {
     console.log(chalk.gray(`   Archive: ${archivePath}`));
 
     if (shouldOpenBrowser) {
-      console.log(chalk.blue(`🚀 Opening dashboard in browser...`));
       openInBrowser(latestPath);
     }
   }
@@ -134,11 +125,13 @@ async function main() {
   // Generate Markdown report if requested
   if (shouldSaveMarkdown) {
     const reportPath = saveMarkdownReport(results, userActivities);
-    console.log(chalk.bold.green(`\n📄 Markdown report generated: ${chalk.underline(reportPath)}`));
+    logger.success(`Markdown report saved: ${reportPath}`);
   }
+
+  logger.success('CLI scan completed successfully!');
 }
 
 main().catch((err) => {
-  console.error(chalk.red('\nFatal error:'), err);
+  logger.error('Fatal CLI execution error:', err);
   process.exit(1);
 });
