@@ -10,12 +10,16 @@
 - **Dual Dashboard Views in HTML:**
   - 🏢 **Repository Health View:** Repo-level health, stale branch lists, open PR tables, and health status indicators.
   - 👤 **Contributor Activities View:** Aggregates activity per developer across all monitored repositories. Shows open PRs, stale PRs, stale branches authored by each user, and review attention indicators.
+- **Global Item Search Engine:**
+  - Instantly searches across **all items**: Pull Requests (title, #, author), Branches (name, author), Contributors (usernames, repos), and Repositories.
+  - **Category Filter Chips:** Filter search results on the fly by `All`, `Pull Requests`, `Branches`, `Contributors`, or `Repositories`.
+  - **Keyword Highlighting:** Matches are highlighted (`<mark>`) in titles, branch names, and usernames.
+  - **Keyboard Shortcuts:** Press `/` anywhere to focus the search bar, and `Escape` (or click `✕`) to clear and exit search.
 - **Interactive HTML Dashboard:** Generates a modern, responsive HTML page with:
   - Metric counters (Total Repos, Active Contributors, Stale Branches, Open PRs, Draft PRs, Inactive PRs).
   - Contributor leaderboard with GitHub avatars and links.
   - Quick-navigation overview table.
   - Per-repository & per-contributor breakdown cards.
-  - Real-time instant search/filter across all branches, PRs, and users.
   - Direct links to GitHub branches, commits, and PRs.
 - **Stale Branch Detection:** Identifies branches with no recent commits past configurable thresholds (default: 30 days stale, 60 days warning), filtering out default branches and indicating if an open PR exists.
 - **Pull Request Overview:** Lists open PRs, their age, inactive days since last update, author, and draft status.

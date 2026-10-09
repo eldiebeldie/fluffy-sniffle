@@ -15,7 +15,7 @@ function escapeHtml(str) {
 }
 
 /**
- * Generate complete self-contained HTML dashboard with Repository & User views
+ * Generate complete self-contained HTML dashboard with Repository & User views and Global Item Search
  */
 export function generateHtmlReport(results = [], userActivities = [], metadata = {}) {
   const generatedAt = metadata.lastScanTime ? new Date(metadata.lastScanTime).toUTCString() : new Date().toUTCString();
@@ -34,12 +34,15 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
   const contributorsWithStalePrs = userActivities.filter((u) => u.stalePrsCount > 0).length;
   const totalReviewItems = userActivities.reduce((acc, u) => acc + u.totalNeedsAttention, 0);
 
+  // Safe JSON serialization of dashboard data for client-side search engine
+  const dashboardDataJson = JSON.stringify({ results, userActivities }).replace(/</g, '\\u003c');
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GitHub Repository & Contributor Activity Dashboard</title>
+  <title>GitHub Repository & Contributor Health Dashboard</title>
   <style>
     :root {
       --bg: #0d1117;
@@ -110,19 +113,53 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       flex-wrap: wrap;
     }
 
+    /* Enhanced Search Input */
+    .search-wrapper {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      min-width: 340px;
+    }
+
     .search-input {
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 6px;
       color: #fff;
-      padding: 8px 12px;
+      padding: 8px 32px 8px 12px;
       font-size: 13px;
       outline: none;
-      transition: border-color 0.2s;
+      width: 100%;
+      transition: all 0.2s;
     }
 
     .search-input:focus {
       border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+    }
+
+    .search-clear-btn {
+      position: absolute;
+      right: 8px;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 14px;
+      cursor: pointer;
+      display: none;
+      padding: 2px;
+      line-height: 1;
+    }
+
+    .search-clear-btn:hover {
+      color: #fff;
+    }
+
+    mark {
+      background: rgba(255, 212, 59, 0.35);
+      color: #fff;
+      padding: 1px 3px;
+      border-radius: 3px;
     }
 
     /* Buttons */
@@ -206,6 +243,8 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       margin-bottom: 24px;
       border-bottom: 1px solid var(--border);
       padding-bottom: 12px;
+      flex-wrap: wrap;
+      align-items: center;
     }
 
     .view-btn {
@@ -213,7 +252,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       border: 1px solid var(--border);
       border-radius: 8px;
       color: var(--text-muted);
-      padding: 10px 20px;
+      padding: 10px 18px;
       font-size: 14px;
       font-weight: 600;
       cursor: pointer;
@@ -300,6 +339,8 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       justify-content: space-between;
       align-items: center;
       background: rgba(255, 255, 255, 0.02);
+      flex-wrap: wrap;
+      gap: 10px;
     }
 
     .section-header h2 {
@@ -431,7 +472,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     }
 
     .empty-state {
-      padding: 16px;
+      padding: 24px;
       text-align: center;
       color: var(--text-muted);
       font-style: italic;
@@ -463,6 +504,36 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       display: none;
     }
 
+    /* Filter Chips */
+    .filter-chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .chip-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 4px 12px;
+      border-radius: 16px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .chip-btn:hover {
+      color: #fff;
+      border-color: var(--text-muted);
+    }
+
+    .chip-btn.active {
+      background: rgba(88, 166, 255, 0.2);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
     footer {
       text-align: center;
       color: var(--text-muted);
@@ -483,7 +554,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
 
       <div class="controls">
         <!-- Add Repo Form -->
-        <input type="text" id="newRepoInput" class="search-input" placeholder="Add repo: owner/repo" style="min-width: 170px;">
+        <input type="text" id="newRepoInput" class="search-input" placeholder="Add repo: owner/repo" style="width: 170px;">
         <button class="btn btn-secondary" id="addRepoBtn" onclick="handleAddRepo()">➕ Add</button>
 
         <!-- Trigger Scan Button -->
@@ -491,19 +562,44 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
           <span id="scanBtnIcon">🔄</span> <span id="scanBtnText">Run Report Now</span>
         </button>
 
-        <!-- Search Bar -->
-        <input type="text" id="searchInput" class="search-input" placeholder="🔍 Search..." style="min-width: 160px;">
+        <!-- Search Input with Clear Button -->
+        <div class="search-wrapper">
+          <input type="text" id="searchInput" class="search-input" placeholder="🔍 Search all items (PR, branch, user, repo)... [/]" autocomplete="off">
+          <button id="searchClearBtn" class="search-clear-btn" onclick="clearSearch()" title="Clear search (Esc)">✕</button>
+        </div>
       </div>
     </header>
 
     <!-- Top View Switcher Tabs -->
-    <div class="view-switcher">
+    <div class="view-switcher" id="mainViewSwitcher">
       <button class="view-btn active" id="btnViewRepos" onclick="switchView('repos')">
         🏢 Repositories View <span class="pill" id="badgeTotalRepos">${totalRepos}</span>
       </button>
       <button class="view-btn" id="btnViewUsers" onclick="switchView('users')">
         👤 Contributor Activities <span class="pill" id="badgeTotalContributors">${totalContributors}</span>
       </button>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- VIEW 3: SEARCH RESULTS VIEW (Appears on search)-->
+    <!-- ============================================== -->
+    <div id="viewSearch" class="view-panel hidden">
+      <div class="section-card">
+        <div class="section-header">
+          <div>
+            <h2 id="searchSummaryTitle">🔍 Search Results</h2>
+            <p id="searchSummarySubtitle" style="font-size: 13px; color: var(--text-muted); margin-top: 2px;"></p>
+          </div>
+          <div class="filter-chips">
+            <button class="chip-btn active" id="chipAll" onclick="filterSearchType('all')">All (<span id="countSearchAll">0</span>)</button>
+            <button class="chip-btn" id="chipPrs" onclick="filterSearchType('prs')">Pull Requests (<span id="countSearchPrs">0</span>)</button>
+            <button class="chip-btn" id="chipBranches" onclick="filterSearchType('branches')">Branches (<span id="countSearchBranches">0</span>)</button>
+            <button class="chip-btn" id="chipUsers" onclick="filterSearchType('users')">Contributors (<span id="countSearchUsers">0</span>)</button>
+            <button class="chip-btn" id="chipRepos" onclick="filterSearchType('repos')">Repositories (<span id="countSearchRepos">0</span>)</button>
+          </div>
+        </div>
+        <div id="searchResultsContent" style="padding: 16px;"></div>
+      </div>
     </div>
 
     <!-- ============================================== -->
@@ -544,7 +640,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
           <h2>Repositories Overview</h2>
         </div>
         <div style="overflow-x: auto;">
-          <table class="filterable-table">
+          <table>
             <thead>
               <tr>
                 <th>Repository</th>
@@ -598,7 +694,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
           const repoGithubUrl = `https://github.com/${escapeHtml(r.fullName)}`;
 
           return `
-            <div class="detail-card filterable-card" id="${repoAnchor}">
+            <div class="detail-card" id="${repoAnchor}">
               <div class="detail-card-header">
                 <div class="card-title">
                   <a href="${repoGithubUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(r.fullName)}</a>
@@ -616,7 +712,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                   <div class="empty-state">No stale branches found!</div>
                 ` : `
                   <div style="overflow-x: auto;">
-                    <table class="filterable-table">
+                    <table>
                       <thead>
                         <tr>
                           <th>Branch</th>
@@ -659,7 +755,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                   <div class="empty-state">No open pull requests.</div>
                 ` : `
                   <div style="overflow-x: auto;">
-                    <table class="filterable-table">
+                    <table>
                       <thead>
                         <tr>
                           <th>PR</th>
@@ -734,7 +830,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
           <h2>Contributor Leaderboard & Overview</h2>
         </div>
         <div style="overflow-x: auto;">
-          <table class="filterable-table">
+          <table>
             <thead>
               <tr>
                 <th>Contributor</th>
@@ -796,7 +892,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
           const userAnchor = `user-${escapeHtml(u.username.replace(/[^a-zA-Z0-9_-]/g, '-'))}`;
 
           return `
-            <div class="detail-card filterable-card" id="${userAnchor}">
+            <div class="detail-card" id="${userAnchor}">
               <div class="detail-card-header">
                 <div class="card-title">
                   <div class="user-flex">
@@ -817,7 +913,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                   <div class="empty-state">No open PRs authored by ${escapeHtml(u.username)}.</div>
                 ` : `
                   <div style="overflow-x: auto;">
-                    <table class="filterable-table">
+                    <table>
                       <thead>
                         <tr>
                           <th>Repository</th>
@@ -856,7 +952,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                   <div class="empty-state">No stale branches authored by ${escapeHtml(u.username)}.</div>
                 ` : `
                   <div style="overflow-x: auto;">
-                    <table class="filterable-table">
+                    <table>
                       <thead>
                         <tr>
                           <th>Repository</th>
@@ -897,24 +993,36 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
   </div>
 
   <script>
-    // Tab View Switcher
+    // Embedded Data for Instant Client-side Global Search
+    const DASHBOARD_DATA = ${dashboardDataJson};
+
+    let previousView = 'repos';
+    let currentSearchCategory = 'all';
+    let currentSearchResults = null;
+
+    // View Switching
     function switchView(view) {
       const viewRepos = document.getElementById('viewRepos');
       const viewUsers = document.getElementById('viewUsers');
+      const viewSearch = document.getElementById('viewSearch');
       const btnViewRepos = document.getElementById('btnViewRepos');
       const btnViewUsers = document.getElementById('btnViewUsers');
+
+      viewSearch.classList.add('hidden');
 
       if (view === 'users') {
         viewRepos.classList.add('hidden');
         viewUsers.classList.remove('hidden');
         btnViewRepos.classList.remove('active');
         btnViewUsers.classList.add('active');
+        previousView = 'users';
         window.location.hash = 'users';
       } else {
         viewUsers.classList.add('hidden');
         viewRepos.classList.remove('hidden');
         btnViewUsers.classList.remove('active');
         btnViewRepos.classList.add('active');
+        previousView = 'repos';
         window.location.hash = 'repos';
       }
     }
@@ -923,22 +1031,229 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       switchView('users');
     }
 
-    // Live Search Filter
+    // Escape regex characters
+    function escapeRegExp(string) {
+      return string.replace(/[.*+?^$\\{}()|[\\]\\\\]/g, '\\\\$&');
+    }
+
+    // Highlight text matching query
+    function highlight(text, query) {
+      if (!text) return '';
+      if (!query) return escapeHtml(text);
+      const safeText = String(text);
+      const escapedQuery = escapeRegExp(query);
+      const regex = new RegExp('(' + escapedQuery + ')', 'gi');
+      return escapeHtml(safeText).replace(regex, '<mark>$1</mark>');
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // Global Search Engine
+    function performSearch(query) {
+      const q = query.toLowerCase().trim();
+      if (!q) {
+        clearSearch();
+        return;
+      }
+
+      document.getElementById('searchClearBtn').style.display = 'block';
+
+      // Hide standard panels, show search panel
+      document.getElementById('viewRepos').classList.add('hidden');
+      document.getElementById('viewUsers').classList.add('hidden');
+      document.getElementById('viewSearch').classList.remove('hidden');
+
+      const repos = DASHBOARD_DATA.results || [];
+      const users = DASHBOARD_DATA.userActivities || [];
+
+      // 1. Search PRs
+      const matchedPrs = [];
+      repos.forEach(repo => {
+        (repo.pullRequests || []).forEach(pr => {
+          if (
+            pr.title.toLowerCase().includes(q) ||
+            String(pr.number).includes(q) ||
+            (pr.author && pr.author.toLowerCase().includes(q)) ||
+            repo.fullName.toLowerCase().includes(q)
+          ) {
+            matchedPrs.push({ ...pr, repoFullName: repo.fullName });
+          }
+        });
+      });
+
+      // 2. Search Branches
+      const matchedBranches = [];
+      repos.forEach(repo => {
+        (repo.branches || []).forEach(b => {
+          if (
+            b.name.toLowerCase().includes(q) ||
+            (b.author && b.author.toLowerCase().includes(q)) ||
+            repo.fullName.toLowerCase().includes(q)
+          ) {
+            matchedBranches.push({ ...b, repoFullName: repo.fullName });
+          }
+        });
+      });
+
+      // 3. Search Contributors
+      const matchedUsers = users.filter(u =>
+        u.username.toLowerCase().includes(q) ||
+        u.repositories.some(r => r.toLowerCase().includes(q))
+      );
+
+      // 4. Search Repositories
+      const matchedRepos = repos.filter(r =>
+        r.fullName.toLowerCase().includes(q) ||
+        r.defaultBranch.toLowerCase().includes(q)
+      );
+
+      const totalMatches = matchedPrs.length + matchedBranches.length + matchedUsers.length + matchedRepos.length;
+
+      // Update counters
+      document.getElementById('countSearchAll').textContent = totalMatches;
+      document.getElementById('countSearchPrs').textContent = matchedPrs.length;
+      document.getElementById('countSearchBranches').textContent = matchedBranches.length;
+      document.getElementById('countSearchUsers').textContent = matchedUsers.length;
+      document.getElementById('countSearchRepos').textContent = matchedRepos.length;
+
+      document.getElementById('searchSummaryTitle').innerHTML = '🔍 Search Results for "' + escapeHtml(query) + '"';
+      document.getElementById('searchSummarySubtitle').textContent = 'Found ' + totalMatches + ' matching items across all tracked repositories';
+
+      currentSearchResults = { q, matchedPrs, matchedBranches, matchedUsers, matchedRepos };
+      renderSearchResults();
+    }
+
+    function filterSearchType(type) {
+      currentSearchCategory = type;
+      ['all', 'prs', 'branches', 'users', 'repos'].forEach(t => {
+        const id = 'chip' + t.charAt(0).toUpperCase() + t.slice(1);
+        const btn = document.getElementById(id);
+        if (btn) btn.classList.toggle('active', t === type);
+      });
+      renderSearchResults();
+    }
+
+    function renderSearchResults() {
+      if (!currentSearchResults) return;
+      const { q, matchedPrs, matchedBranches, matchedUsers, matchedRepos } = currentSearchResults;
+      const container = document.getElementById('searchResultsContent');
+      let html = '';
+
+      const showAll = currentSearchCategory === 'all';
+
+      // Repositories Section
+      if ((showAll || currentSearchCategory === 'repos') && matchedRepos.length > 0) {
+        html += '<div style="margin-bottom: 24px;">';
+        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: #fff;">🏢 Matching Repositories (' + matchedRepos.length + ')</h3>';
+        html += '<div style="overflow-x: auto;"><table><thead><tr><th>Repository</th><th style="text-align: center;">Branches</th><th style="text-align: center;">Stale</th><th style="text-align: center;">Open PRs</th><th style="text-align: center;">Inactive PRs</th></tr></thead><tbody>';
+        matchedRepos.forEach(r => {
+          html += '<tr>';
+          html += '<td><strong><a href="https://github.com/' + escapeHtml(r.fullName) + '" target="_blank">' + highlight(r.fullName, q) + '</a></strong></td>';
+          html += '<td style="text-align: center;">' + r.totalBranches + '</td>';
+          html += '<td style="text-align: center;"><span class="badge badge-warning">' + r.staleBranchesCount + '</span></td>';
+          html += '<td style="text-align: center;">' + r.totalOpenPrs + '</td>';
+          html += '<td style="text-align: center;">' + r.stalePrsCount + '</td>';
+          html += '</tr>';
+        });
+        html += '</tbody></table></div></div>';
+      }
+
+      // Pull Requests Section
+      if ((showAll || currentSearchCategory === 'prs') && matchedPrs.length > 0) {
+        html += '<div style="margin-bottom: 24px;">';
+        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: #fff;">🔀 Matching Pull Requests (' + matchedPrs.length + ')</h3>';
+        html += '<div style="overflow-x: auto;"><table><thead><tr><th>Repository</th><th>PR</th><th>Title</th><th>Author</th><th style="text-align: center;">Age</th><th style="text-align: center;">Last Active</th><th style="text-align: center;">Status</th></tr></thead><tbody>';
+        matchedPrs.forEach(pr => {
+          html += '<tr>';
+          html += '<td><span class="badge badge-tag">' + highlight(pr.repoFullName, q) + '</span></td>';
+          html += '<td><a href="' + escapeHtml(pr.url) + '" target="_blank"><strong>#' + highlight(pr.number, q) + '</strong></a></td>';
+          html += '<td><a href="' + escapeHtml(pr.url) + '" target="_blank">' + highlight(pr.title, q) + '</a></td>';
+          html += '<td>' + highlight(pr.author, q) + '</td>';
+          html += '<td style="text-align: center;">' + pr.ageDays + 'd</td>';
+          html += '<td style="text-align: center;">' + (pr.isStalePr ? '<span class="badge badge-warning">' + pr.daysSinceLastUpdate + 'd ago</span>' : pr.daysSinceLastUpdate + 'd ago') + '</td>';
+          html += '<td style="text-align: center;">' + (pr.isDraft ? '<span class="badge badge-draft">Draft</span>' : '<span class="badge badge-healthy">Ready</span>') + '</td>';
+          html += '</tr>';
+        });
+        html += '</tbody></table></div></div>';
+      }
+
+      // Branches Section
+      if ((showAll || currentSearchCategory === 'branches') && matchedBranches.length > 0) {
+        html += '<div style="margin-bottom: 24px;">';
+        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: #fff;">🍂 Matching Branches (' + matchedBranches.length + ')</h3>';
+        html += '<div style="overflow-x: auto;"><table><thead><tr><th>Repository</th><th>Branch</th><th style="text-align: center;">Inactive Days</th><th>Last Author</th><th style="text-align: center;">Open PR?</th></tr></thead><tbody>';
+        matchedBranches.forEach(b => {
+          const branchUrl = 'https://github.com/' + escapeHtml(b.repoFullName) + '/tree/' + encodeURIComponent(b.name);
+          const badgeClass = b.isVeryStale ? 'badge-danger' : (b.isStale ? 'badge-warning' : 'badge-healthy');
+          html += '<tr>';
+          html += '<td><span class="badge badge-tag">' + highlight(b.repoFullName, q) + '</span></td>';
+          html += '<td><a href="' + branchUrl + '" target="_blank"><code>' + highlight(b.name, q) + '</code></a></td>';
+          html += '<td style="text-align: center;"><span class="badge ' + badgeClass + '">' + (b.daysInactive !== null ? b.daysInactive + 'd' : 'Active') + '</span></td>';
+          html += '<td>' + highlight(b.author, q) + '</td>';
+          html += '<td style="text-align: center;">' + (b.hasOpenPr ? '<span class="badge badge-healthy">Yes</span>' : '<span style="color: var(--text-muted)">No</span>') + '</td>';
+          html += '</tr>';
+        });
+        html += '</tbody></table></div></div>';
+      }
+
+      // Contributors Section
+      if ((showAll || currentSearchCategory === 'users') && matchedUsers.length > 0) {
+        html += '<div style="margin-bottom: 24px;">';
+        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: #fff;">👤 Matching Contributors (' + matchedUsers.length + ')</h3>';
+        html += '<div style="overflow-x: auto;"><table><thead><tr><th>Contributor</th><th>Repositories</th><th style="text-align: center;">Open PRs</th><th style="text-align: center;">Inactive PRs</th><th style="text-align: center;">Stale Branches</th><th style="text-align: center;">Items to Review</th></tr></thead><tbody>';
+        matchedUsers.forEach(u => {
+          const userAvatar = u.username && u.username !== 'unknown' ? 'https://github.com/' + encodeURIComponent(u.username) + '.png?size=40' : '';
+          html += '<tr>';
+          html += '<td><div class="user-flex">' + (userAvatar ? '<img src="' + userAvatar + '" class="user-avatar" onerror="this.style.display=\\'none\\'"> ' : '') + '<strong><a href="https://github.com/' + escapeHtml(u.username) + '" target="_blank">' + highlight(u.username, q) + '</a></strong></div></td>';
+          html += '<td>' + u.repositories.map(repo => '<span class="badge badge-tag">' + highlight(repo, q) + '</span>').join('') + '</td>';
+          html += '<td style="text-align: center;">' + u.openPrsCount + '</td>';
+          html += '<td style="text-align: center;">' + (u.stalePrsCount > 0 ? '<span class="badge badge-warning">' + u.stalePrsCount + '</span>' : '0') + '</td>';
+          html += '<td style="text-align: center;">' + (u.staleBranchesCount > 0 ? '<span class="badge badge-danger">' + u.staleBranchesCount + '</span>' : '0') + '</td>';
+          html += '<td style="text-align: center;">' + (u.totalNeedsAttention > 0 ? '<span class="badge badge-warning">' + u.totalNeedsAttention + ' items</span>' : '<span class="badge badge-healthy">All Good</span>') + '</td>';
+          html += '</tr>';
+        });
+        html += '</tbody></table></div></div>';
+      }
+
+      if (html === '') {
+        html = '<div class="empty-state">No matching items found for "<strong>' + escapeHtml(q) + '</strong>".<br>Try searching by branch name, PR number, title, author handle, or repository name.</div>';
+      }
+
+      container.innerHTML = html;
+    }
+
+    function clearSearch() {
+      const input = document.getElementById('searchInput');
+      input.value = '';
+      document.getElementById('searchClearBtn').style.display = 'none';
+      currentSearchResults = null;
+      switchView(previousView);
+    }
+
+    // Live search input listener
     const searchInput = document.getElementById('searchInput');
     searchInput.addEventListener('input', (e) => {
-      const query = e.target.value.toLowerCase().trim();
+      performSearch(e.target.value);
+    });
 
-      const rows = document.querySelectorAll('.filterable-table tbody tr');
-      rows.forEach((row) => {
-        const text = row.textContent.toLowerCase();
-        row.style.display = text.includes(query) ? '' : 'none';
-      });
-
-      const cards = document.querySelectorAll('.filterable-card');
-      cards.forEach((card) => {
-        const text = card.textContent.toLowerCase();
-        card.style.display = query === '' || text.includes(query) ? '' : 'none';
-      });
+    // Keyboard Shortcuts: '/' to focus search, 'Escape' to clear
+    window.addEventListener('keydown', (e) => {
+      if (e.key === '/' && document.activeElement !== searchInput && document.activeElement.tagName !== 'INPUT') {
+        e.preventDefault();
+        searchInput.focus();
+        searchInput.select();
+      } else if (e.key === 'Escape' && document.activeElement === searchInput) {
+        clearSearch();
+        searchInput.blur();
+      }
     });
 
     // Toast helper
