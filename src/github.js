@@ -16,6 +16,7 @@ export const hasToken = Boolean(token);
  * Fetch branches and PRs using GraphQL (requires GITHUB_TOKEN)
  */
 async function fetchViaGraphQL(owner, repo) {
+  const fetchStart = Date.now();
   logger.info(`Fetching ${owner}/${repo} via GitHub GraphQL API...`);
 
   const query = `
@@ -77,10 +78,11 @@ async function fetchViaGraphQL(owner, repo) {
   `;
 
   const response = await octokit.graphql(query, { owner, repo });
+  const durationMs = Date.now() - fetchStart;
   const repoData = response.repository;
 
   if (!repoData) {
-    logger.error(`Repository ${owner}/${repo} not found on GitHub.`);
+    logger.error(`Repository ${owner}/${repo} not found on GitHub after ${durationMs}ms.`);
     throw new Error(`Repository ${owner}/${repo} not found.`);
   }
 
@@ -114,7 +116,7 @@ async function fetchViaGraphQL(owner, repo) {
   const openPrsCount = repoData.openPullRequests?.totalCount ?? pullRequests.filter((p) => p.state === 'OPEN').length;
 
   logger.info(
-    `[${owner}/${repo}] GraphQL fetch complete: ${branches.length} branches, ${pullRequests.length} PRs (${openPrsCount} open, default branch: ${defaultBranch})`
+    `[${owner}/${repo}] GraphQL fetch complete in ${durationMs}ms: ${branches.length} branches, ${pullRequests.length} PRs (${openPrsCount} open, default branch: ${defaultBranch})`
   );
 
   return {
@@ -133,6 +135,7 @@ async function fetchViaGraphQL(owner, repo) {
  * Fallback: Fetch branches and PRs using REST API (works unauthenticated for public repos)
  */
 async function fetchViaRest(owner, repo) {
+  const fetchStart = Date.now();
   logger.info(`Fetching ${owner}/${repo} via GitHub REST API (unauthenticated fallback)...`);
 
   // 1. Get repository metadata
@@ -205,9 +208,10 @@ async function fetchViaRest(owner, repo) {
   );
 
   const openPrsCount = pullRequests.filter((p) => p.state === 'OPEN').length;
+  const durationMs = Date.now() - fetchStart;
 
   logger.info(
-    `[${owner}/${repo}] REST fetch complete: ${branches.length} branches, ${pullRequests.length} PRs (${openPrsCount} open, default branch: ${defaultBranch})`
+    `[${owner}/${repo}] REST fetch complete in ${durationMs}ms: ${branches.length} branches, ${pullRequests.length} PRs (${openPrsCount} open, default branch: ${defaultBranch})`
   );
 
   return {
@@ -226,15 +230,22 @@ async function fetchViaRest(owner, repo) {
  * Main export to get repository data
  */
 export async function getRepositoryHealthData(owner, repo) {
-  logger.action('Fetch Repository', `${owner}/${repo} using ${hasToken ? 'GraphQL API' : 'REST API'}`);
+  const startTime = Date.now();
+  const apiType = hasToken ? 'GraphQL API' : 'REST API';
+  logger.action('Fetch Repository', `${owner}/${repo} using ${apiType}`);
   try {
+    let result;
     if (hasToken) {
-      return await fetchViaGraphQL(owner, repo);
+      result = await fetchViaGraphQL(owner, repo);
     } else {
-      return await fetchViaRest(owner, repo);
+      result = await fetchViaRest(owner, repo);
     }
+    const durationMs = Date.now() - startTime;
+    logger.success(`Fetched repository ${owner}/${repo} (${apiType}) in ${durationMs}ms`);
+    return result;
   } catch (err) {
-    logger.error(`Failed to fetch repository ${owner}/${repo}: ${err.message}`);
+    const durationMs = Date.now() - startTime;
+    logger.error(`Failed to fetch repository ${owner}/${repo} after ${durationMs}ms: ${err.message}`);
     throw err;
   }
 }

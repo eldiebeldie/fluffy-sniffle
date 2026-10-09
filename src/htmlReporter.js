@@ -1950,19 +1950,22 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       text.textContent = 'Scanning...';
       showToast('Starting repository health scan...', 'info');
 
+      const reqStart = performance.now();
       try {
         const res = await fetch('/api/scan', { method: 'POST' });
         const data = await res.json();
-        console.log('[Dashboard:API] POST /api/scan response:', data);
+        const durationMs = Math.round(performance.now() - reqStart);
+        console.log('[Dashboard:API] POST /api/scan completed in ' + durationMs + 'ms:', data);
         if (!res.ok || !data.success) {
           throw new Error(data.error || 'Scan failed');
         }
-        showToast('✔ Scan complete! Updating page...', 'success');
+        showToast('✔ Scan complete in ' + durationMs + 'ms! Updating page...', 'success');
         setTimeout(() => {
           window.location.reload();
         }, 600);
       } catch (err) {
-        console.error('[Dashboard:API] Scan error:', err);
+        const durationMs = Math.round(performance.now() - reqStart);
+        console.error('[Dashboard:API] Scan error after ' + durationMs + 'ms:', err);
         showToast('❌ Scan failed: ' + err.message, 'error');
         btn.disabled = false;
         icon.classList.remove('spinning');
@@ -1982,19 +1985,23 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
 
       const [owner, repo] = fullName.split('/');
       showToast('Removing ' + fullName + '...', 'info');
+      const reqStart = performance.now();
       try {
         const res = await fetch('/api/repos/' + encodeURIComponent(owner) + '/' + encodeURIComponent(repo), {
           method: 'DELETE'
         });
         const data = await res.json();
+        const durationMs = Math.round(performance.now() - reqStart);
+        console.log('[Dashboard:API] DELETE /api/repos completed in ' + durationMs + 'ms:', data);
         if (!res.ok || !data.success) {
           throw new Error(data.error || 'Failed to remove repository');
         }
-        showToast('✔ Removed ' + fullName + '! Refreshing...', 'success');
+        showToast('✔ Removed ' + fullName + ' in ' + durationMs + 'ms! Refreshing...', 'success');
         setTimeout(() => window.location.reload(), 600);
       } catch (err) {
-        console.error('[Dashboard:API] Remove repo error:', err);
-        showToast('❌ ' + err.message, 'error');
+        const durationMs = Math.round(performance.now() - reqStart);
+        console.error('[Dashboard:API] Remove repo error after ' + durationMs + 'ms:', err);
+        showToast('❌ Failed: ' + err.message, 'error');
       }
     }
 
@@ -2020,6 +2027,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       if (addBtn) addBtn.disabled = true;
       showToast('Verifying ' + repoStr + ' on GitHub...', 'info');
 
+      const reqStart = performance.now();
       try {
         const res = await fetch('/api/repos', {
           method: 'POST',
@@ -2027,15 +2035,17 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
           body: JSON.stringify({ repoStr })
         });
         const data = await res.json();
-        console.log('[Dashboard:API] POST /api/repos response:', data);
+        const durationMs = Math.round(performance.now() - reqStart);
+        console.log('[Dashboard:API] POST /api/repos completed in ' + durationMs + 'ms:', data);
         if (!res.ok || !data.success) {
           throw new Error(data.error || 'Failed to add repository');
         }
-        showToast('✔ Repository verified & added! Refreshing...', 'success');
+        showToast('✔ Repository verified & added in ' + durationMs + 'ms! Refreshing...', 'success');
         input.value = '';
         setTimeout(() => window.location.reload(), 600);
       } catch (err) {
-        console.error('[Dashboard:API] Add repo error:', err);
+        const durationMs = Math.round(performance.now() - reqStart);
+        console.error('[Dashboard:API] Add repo error after ' + durationMs + 'ms:', err);
         showToast('❌ ' + err.message, 'error');
       } finally {
         input.disabled = false;

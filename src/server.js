@@ -28,9 +28,22 @@ let isScanning = false;
 
 app.use(express.json());
 
-// Request logging middleware
+// Request duration and access logging middleware
 app.use((req, res, next) => {
-  logger.action('HTTP Request', `${req.method} ${req.url}`);
+  const startTime = Date.now();
+  const path = req.originalUrl || req.url;
+
+  res.on('finish', () => {
+    const elapsedMs = Date.now() - startTime;
+    const status = res.statusCode;
+    const logMsg = `${req.method} ${path} -> ${status} (${elapsedMs}ms)`;
+    if (status >= 400) {
+      logger.error(`[HTTP] ${logMsg}`);
+    } else {
+      logger.action('HTTP Request', logMsg);
+    }
+  });
+
   next();
 });
 
