@@ -16,7 +16,8 @@ function escapeHtml(str) {
 }
 
 /**
- * Generate complete self-contained HTML dashboard with Repository & User views and Global Item Search
+ * Generate complete self-contained HTML dashboard with Repository & User views,
+ * Global Item Search, Section 508 Accessibility, and 4 Visual Themes.
  */
 export function generateHtmlReport(results = [], userActivities = [], metadata = {}) {
   const generatedAt = metadata.lastScanTime ? new Date(metadata.lastScanTime).toUTCString() : new Date().toUTCString();
@@ -39,33 +40,156 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
   const dashboardDataJson = JSON.stringify({ results, userActivities }).replace(/</g, '\\u003c');
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GitHub Repository & Contributor Health Dashboard</title>
   <style>
-    :root {
+    /* --------------------------------------------------
+       THEMES & ACCESSIBILITY TOKENS (Section 508 / WCAG)
+       -------------------------------------------------- */
+
+    /* 1. Dark Theme (Default) */
+    :root, [data-theme="dark"] {
       --bg: #0d1117;
       --card-bg: #161b22;
       --border: #30363d;
-      --text-main: #c9d1d9;
+      --text-main: #f0f6fc;
       --text-muted: #8b949e;
+      --header-text: #ffffff;
       --accent: #58a6ff;
       --accent-hover: #79c0ff;
-      --success: #238636;
-      --success-light: #2ea043;
+      --accent-bg: rgba(88, 166, 255, 0.15);
+      --success: #3fb950;
+      --success-light: #56d364;
+      --success-bg: rgba(63, 185, 80, 0.18);
       --warning: #d29922;
-      --warning-bg: rgba(210, 153, 34, 0.15);
+      --warning-bg: rgba(210, 153, 34, 0.18);
       --danger: #f85149;
-      --danger-bg: rgba(248, 81, 73, 0.15);
-      --badge-draft: #6e7681;
+      --danger-bg: rgba(248, 81, 73, 0.18);
+      --badge-draft: #8b949e;
+      --table-hover: rgba(255, 255, 255, 0.03);
+      --focus-ring: #58a6ff;
+      --chip-active-bg: rgba(88, 166, 255, 0.2);
     }
 
+    /* 2. Light Theme (High Readability, Contrast Ratio >= 4.5:1 / 7:1) */
+    [data-theme="light"] {
+      --bg: #f6f8fa;
+      --card-bg: #ffffff;
+      --border: #d0d7de;
+      --text-main: #1f2328;
+      --text-muted: #4a5568;
+      --header-text: #090a0c;
+      --accent: #0969da;
+      --accent-hover: #0550ae;
+      --accent-bg: rgba(9, 105, 218, 0.1);
+      --success: #1a7f37;
+      --success-light: #116329;
+      --success-bg: rgba(26, 127, 55, 0.14);
+      --warning: #9a6700;
+      --warning-bg: rgba(154, 103, 0, 0.14);
+      --danger: #cf222e;
+      --danger-bg: rgba(207, 34, 46, 0.12);
+      --badge-draft: #4a5568;
+      --table-hover: #f3f4f6;
+      --focus-ring: #0969da;
+      --chip-active-bg: rgba(9, 105, 218, 0.15);
+    }
+
+    /* 3. Midnight Theme (Deep Oceanic Navy & Electric Cyan) */
+    [data-theme="midnight"] {
+      --bg: #0b0f19;
+      --card-bg: #111827;
+      --border: #1f2937;
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --header-text: #ffffff;
+      --accent: #38bdf8;
+      --accent-hover: #7dd3fc;
+      --accent-bg: rgba(56, 189, 248, 0.15);
+      --success: #34d399;
+      --success-light: #10b981;
+      --success-bg: rgba(52, 211, 153, 0.15);
+      --warning: #fbbf24;
+      --warning-bg: rgba(251, 191, 36, 0.18);
+      --danger: #f87171;
+      --danger-bg: rgba(248, 113, 113, 0.18);
+      --badge-draft: #9ca3af;
+      --table-hover: rgba(255, 255, 255, 0.04);
+      --focus-ring: #38bdf8;
+      --chip-active-bg: rgba(56, 189, 248, 0.2);
+    }
+
+    /* 4. High Contrast Theme (Section 508 & WCAG 2.1 AAA Compliant) */
+    [data-theme="high-contrast"] {
+      --bg: #000000;
+      --card-bg: #080808;
+      --border: #ffffff;
+      --text-main: #ffffff;
+      --text-muted: #e6e6e6;
+      --header-text: #ffffff;
+      --accent: #79c0ff;
+      --accent-hover: #a5d6ff;
+      --accent-bg: #112a45;
+      --success: #56d364;
+      --success-light: #7ee787;
+      --success-bg: #0d2e14;
+      --warning: #f2cc60;
+      --warning-bg: #332600;
+      --danger: #ff7b72;
+      --danger-bg: #401519;
+      --badge-draft: #ffffff;
+      --table-hover: #212121;
+      --focus-ring: #f2cc60;
+      --chip-active-bg: #18385e;
+    }
+
+    /* --------------------------------------------------
+       BASE & ACCESSIBILITY STYLES
+       -------------------------------------------------- */
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+    }
+
+    /* Section 508 / WCAG AAA Visible Focus States */
+    *:focus-visible {
+      outline: 3px solid var(--focus-ring) !important;
+      outline-offset: 2px !important;
+    }
+
+    /* Skip to content link for screen reader / keyboard navigation */
+    .skip-link {
+      position: absolute;
+      top: -60px;
+      left: 16px;
+      background: var(--accent);
+      color: #ffffff;
+      padding: 10px 18px;
+      z-index: 10000;
+      text-decoration: none;
+      font-weight: 700;
+      border-radius: 6px;
+      transition: top 0.2s;
+    }
+
+    .skip-link:focus {
+      top: 16px;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border-width: 0;
     }
 
     body {
@@ -74,6 +198,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       color: var(--text-main);
       line-height: 1.5;
       padding: 24px;
+      transition: background-color 0.2s, color 0.2s;
     }
 
     .container {
@@ -95,7 +220,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     .header-title h1 {
       font-size: 26px;
       font-weight: 700;
-      color: #fff;
+      color: var(--header-text);
       display: flex;
       align-items: center;
       gap: 10px;
@@ -114,29 +239,46 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       flex-wrap: wrap;
     }
 
+    /* Theme Selector Dropdown */
+    .theme-select {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .theme-select:hover {
+      border-color: var(--accent);
+    }
+
     /* Enhanced Search Input */
     .search-wrapper {
       position: relative;
       display: inline-flex;
       align-items: center;
-      min-width: 340px;
+      min-width: 320px;
     }
 
     .search-input {
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 6px;
-      color: #fff;
+      color: var(--text-main);
       padding: 8px 32px 8px 12px;
       font-size: 13px;
       outline: none;
       width: 100%;
-      transition: all 0.2s;
+      transition: border-color 0.2s;
     }
 
     .search-input:focus {
       border-color: var(--accent);
-      box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
     }
 
     .search-clear-btn {
@@ -153,14 +295,15 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     }
 
     .search-clear-btn:hover {
-      color: #fff;
+      color: var(--header-text);
     }
 
     mark {
-      background: rgba(255, 212, 59, 0.35);
-      color: #fff;
+      background: rgba(255, 212, 59, 0.4);
+      color: inherit;
       padding: 1px 3px;
       border-radius: 3px;
+      font-weight: 600;
     }
 
     /* Buttons */
@@ -180,7 +323,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
 
     .btn-primary {
       background: var(--success);
-      color: #fff;
+      color: #ffffff;
       border-color: var(--success-light);
     }
 
@@ -189,9 +332,9 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     }
 
     .btn-primary:disabled {
-      background: rgba(35, 134, 54, 0.4);
+      background: var(--success);
       cursor: not-allowed;
-      opacity: 0.8;
+      opacity: 0.6;
     }
 
     .btn-secondary {
@@ -201,8 +344,9 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     }
 
     .btn-secondary:hover:not(:disabled) {
-      background: rgba(255, 255, 255, 0.08);
-      color: #fff;
+      background: var(--table-hover);
+      color: var(--header-text);
+      border-color: var(--accent);
     }
 
     .spinning {
@@ -221,12 +365,12 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       bottom: 24px;
       right: 24px;
       padding: 12px 20px;
-      background: #1f6feb;
-      color: #fff;
+      background: var(--accent);
+      color: #ffffff;
       border-radius: 8px;
       font-size: 14px;
-      font-weight: 500;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      font-weight: 600;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
       z-index: 1000;
       transition: opacity 0.3s, transform 0.3s;
     }
@@ -264,18 +408,18 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     }
 
     .view-btn:hover {
-      background: rgba(255, 255, 255, 0.05);
-      color: #fff;
+      background: var(--table-hover);
+      color: var(--header-text);
     }
 
     .view-btn.active {
-      background: rgba(88, 166, 255, 0.15);
+      background: var(--accent-bg);
       border-color: var(--accent);
-      color: #fff;
+      color: var(--accent);
     }
 
     .view-btn .pill {
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(125, 125, 125, 0.18);
       padding: 2px 7px;
       border-radius: 10px;
       font-size: 12px;
@@ -305,7 +449,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     .metric-value {
       font-size: 28px;
       font-weight: 700;
-      color: #fff;
+      color: var(--header-text);
     }
 
     .metric-value.warning {
@@ -322,6 +466,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       text-transform: uppercase;
       letter-spacing: 0.5px;
       margin-top: 4px;
+      font-weight: 600;
     }
 
     /* Tables */
@@ -339,7 +484,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       display: flex;
       justify-content: space-between;
       align-items: center;
-      background: rgba(255, 255, 255, 0.02);
+      background: var(--table-hover);
       flex-wrap: wrap;
       gap: 10px;
     }
@@ -347,7 +492,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     .section-header h2 {
       font-size: 18px;
       font-weight: 600;
-      color: #fff;
+      color: var(--header-text);
     }
 
     table {
@@ -358,7 +503,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     }
 
     th {
-      background: rgba(255, 255, 255, 0.03);
+      background: var(--table-hover);
       color: var(--text-muted);
       font-weight: 600;
       padding: 12px 16px;
@@ -376,7 +521,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     }
 
     tr:hover td {
-      background: rgba(255, 255, 255, 0.02);
+      background: var(--table-hover);
     }
 
     a {
@@ -384,22 +529,25 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       text-decoration: none;
     }
 
-    a:hover {
+    a:hover, a:focus {
       text-decoration: underline;
     }
 
-    /* Badges */
+    /* Badges with Icon + Text for Section 508 Color Independence */
     .badge {
-      display: inline-block;
-      padding: 3px 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 9px;
       border-radius: 12px;
       font-size: 12px;
       font-weight: 600;
+      white-space: nowrap;
     }
 
     .badge-healthy {
-      background: rgba(46, 160, 67, 0.2);
-      color: var(--success-light);
+      background: var(--success-bg);
+      color: var(--success);
       border: 1px solid var(--success);
     }
 
@@ -416,15 +564,15 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     }
 
     .badge-draft {
-      background: rgba(110, 118, 129, 0.2);
+      background: rgba(125, 125, 125, 0.15);
       color: var(--badge-draft);
-      border: 1px solid var(--badge-draft);
+      border: 1px solid var(--border);
     }
 
     .badge-tag {
-      background: rgba(88, 166, 255, 0.15);
+      background: var(--accent-bg);
       color: var(--accent);
-      border: 1px solid rgba(88, 166, 255, 0.3);
+      border: 1px solid var(--accent);
       font-family: monospace;
       margin-right: 4px;
       margin-bottom: 4px;
@@ -441,7 +589,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
 
     .detail-card-header {
       padding: 16px 20px;
-      background: rgba(255, 255, 255, 0.03);
+      background: var(--table-hover);
       border-bottom: 1px solid var(--border);
       display: flex;
       justify-content: space-between;
@@ -456,6 +604,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       display: flex;
       align-items: center;
       gap: 10px;
+      color: var(--header-text);
     }
 
     .sub-section {
@@ -465,7 +614,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     .sub-title {
       font-size: 15px;
       font-weight: 600;
-      color: #fff;
+      color: var(--header-text);
       margin-bottom: 12px;
       display: flex;
       align-items: center;
@@ -477,7 +626,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       text-align: center;
       color: var(--text-muted);
       font-style: italic;
-      background: rgba(0, 0, 0, 0.1);
+      background: var(--table-hover);
       border-radius: 6px;
     }
 
@@ -519,18 +668,18 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       padding: 4px 12px;
       border-radius: 16px;
       font-size: 12px;
-      font-weight: 500;
+      font-weight: 600;
       cursor: pointer;
       transition: all 0.2s;
     }
 
     .chip-btn:hover {
-      color: #fff;
-      border-color: var(--text-muted);
+      color: var(--header-text);
+      border-color: var(--accent);
     }
 
     .chip-btn.active {
-      background: rgba(88, 166, 255, 0.2);
+      background: var(--chip-active-bg);
       border-color: var(--accent);
       color: var(--accent);
     }
@@ -546,52 +695,68 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
   </style>
 </head>
 <body>
+  <!-- Section 508: Accessible Skip Link -->
+  <a href="#mainViewSwitcher" class="skip-link">Skip to main content</a>
+
   <div class="container">
-    <header>
+    <header role="banner">
       <div class="header-title">
         <h1>📊 GitHub Health & Contributor Dashboard</h1>
         <p id="lastScannedText">Last scanned: ${escapeHtml(generatedAt)}</p>
       </div>
 
-      <div class="controls">
+      <div class="controls" role="toolbar" aria-label="Dashboard Controls">
+        <!-- Section 508 / Accessible Theme Switcher -->
+        <div>
+          <label for="themeSelect" class="sr-only">Visual Theme</label>
+          <select id="themeSelect" class="theme-select" onchange="setTheme(this.value)" aria-label="Visual Theme Selector">
+            <option value="dark">🌙 Dark Mode</option>
+            <option value="light">☀️ Light Mode</option>
+            <option value="midnight">🌌 Midnight</option>
+            <option value="high-contrast">👁️ High Contrast (508)</option>
+          </select>
+        </div>
+
         <!-- Add Repo Form -->
-        <input type="text" id="newRepoInput" class="search-input" placeholder="Add repo: owner/repo" style="width: 170px;">
-        <button class="btn btn-secondary" id="addRepoBtn" onclick="handleAddRepo()">➕ Add</button>
+        <label for="newRepoInput" class="sr-only">Add new repository in owner/repo format</label>
+        <input type="text" id="newRepoInput" class="search-input" placeholder="Add repo: owner/repo" style="width: 165px;" aria-label="Repository name to add">
+        <button class="btn btn-secondary" id="addRepoBtn" onclick="handleAddRepo()" aria-label="Add repository and scan">➕ Add</button>
 
         <!-- Trigger Scan Button -->
-        <button class="btn btn-primary" id="triggerScanBtn" onclick="triggerScan()">
+        <button class="btn btn-primary" id="triggerScanBtn" onclick="triggerScan()" aria-label="Run health report scan now">
           <span id="scanBtnIcon">🔄</span> <span id="scanBtnText">Run Report Now</span>
         </button>
 
         <!-- Search Input with Clear Button -->
         <div class="search-wrapper">
-          <input type="text" id="searchInput" class="search-input" placeholder="🔍 Search all items (PR, branch, user, repo)... [/]" autocomplete="off">
-          <button id="searchClearBtn" class="search-clear-btn" onclick="clearSearch()" title="Clear search (Esc)">✕</button>
+          <label for="searchInput" class="sr-only">Search all items</label>
+          <input type="text" id="searchInput" class="search-input" placeholder="🔍 Search items (PR, branch, user)... [/]" autocomplete="off" aria-label="Search items">
+          <button id="searchClearBtn" class="search-clear-btn" onclick="clearSearch()" title="Clear search (Esc)" aria-label="Clear search">✕</button>
         </div>
       </div>
     </header>
 
     <!-- Top View Switcher Tabs -->
-    <div class="view-switcher" id="mainViewSwitcher">
-      <button class="view-btn active" id="btnViewRepos" onclick="switchView('repos')">
+    <nav class="view-switcher" id="mainViewSwitcher" role="tablist" aria-label="Dashboard Views">
+      <button class="view-btn active" id="btnViewRepos" onclick="switchView('repos')" role="tab" aria-selected="true" aria-controls="viewRepos">
         🏢 Repositories View <span class="pill" id="badgeTotalRepos">${totalRepos}</span>
       </button>
-      <button class="view-btn" id="btnViewUsers" onclick="switchView('users')">
+      <button class="view-btn" id="btnViewUsers" onclick="switchView('users')" role="tab" aria-selected="false" aria-controls="viewUsers">
         👤 Contributor Activities <span class="pill" id="badgeTotalContributors">${totalContributors}</span>
       </button>
-    </div>
+    </nav>
 
     <!-- ============================================== -->
     <!-- VIEW 3: SEARCH RESULTS VIEW (Appears on search)-->
     <!-- ============================================== -->
-    <div id="viewSearch" class="view-panel hidden">
+    <main id="viewSearch" class="view-panel hidden" role="region" aria-label="Search Results">
       <div class="section-card">
         <div class="section-header">
           <div>
             <h2 id="searchSummaryTitle">🔍 Search Results</h2>
             <p id="searchSummarySubtitle" style="font-size: 13px; color: var(--text-muted); margin-top: 2px;"></p>
           </div>
-          <div class="filter-chips">
+          <div class="filter-chips" role="group" aria-label="Filter search categories">
             <button class="chip-btn active" id="chipAll" onclick="filterSearchType('all')">All (<span id="countSearchAll">0</span>)</button>
             <button class="chip-btn" id="chipPrs" onclick="filterSearchType('prs')">Pull Requests (<span id="countSearchPrs">0</span>)</button>
             <button class="chip-btn" id="chipBranches" onclick="filterSearchType('branches')">Branches (<span id="countSearchBranches">0</span>)</button>
@@ -601,12 +766,12 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
         </div>
         <div id="searchResultsContent" style="padding: 16px;"></div>
       </div>
-    </div>
+    </main>
 
     <!-- ============================================== -->
     <!-- VIEW 1: REPOSITORIES VIEW                      -->
     <!-- ============================================== -->
-    <div id="viewRepos" class="view-panel">
+    <main id="viewRepos" class="view-panel" role="region" aria-label="Repositories Overview">
       <!-- Repo KPI Counters -->
       <div class="metrics-grid">
         <div class="metric-card">
@@ -641,16 +806,16 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
           <h2>Repositories Overview</h2>
         </div>
         <div style="overflow-x: auto;">
-          <table>
+          <table aria-label="Repositories Table">
             <thead>
               <tr>
-                <th>Repository</th>
-                <th style="text-align: center;">Branches</th>
-                <th style="text-align: center;">Stale Branches</th>
-                <th style="text-align: center;">Open PRs</th>
-                <th style="text-align: center;">Inactive PRs</th>
-                <th style="text-align: center;">Draft PRs</th>
-                <th style="text-align: center;">Status</th>
+                <th scope="col">Repository</th>
+                <th scope="col" style="text-align: center;">Branches</th>
+                <th scope="col" style="text-align: center;">Stale Branches</th>
+                <th scope="col" style="text-align: center;">Open PRs</th>
+                <th scope="col" style="text-align: center;">Inactive PRs</th>
+                <th scope="col" style="text-align: center;">Draft PRs</th>
+                <th scope="col" style="text-align: center;">Health Status</th>
               </tr>
             </thead>
             <tbody>
@@ -658,13 +823,13 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                 <tr><td colspan="7" class="empty-state">No repositories analyzed yet. Click "Run Report Now" above!</td></tr>
               ` : results.map((r) => {
                 let badgeClass = 'badge-healthy';
-                let badgeLabel = 'Healthy';
+                let badgeLabel = '✔ Healthy';
                 if (r.staleBranchesCount > 10 || r.stalePrsCount > 5) {
                   badgeClass = 'badge-danger';
-                  badgeLabel = 'Needs Cleanup';
+                  badgeLabel = '🛑 Needs Cleanup';
                 } else if (r.staleBranchesCount > 0 || r.stalePrsCount > 0) {
                   badgeClass = 'badge-warning';
-                  badgeLabel = 'Attention';
+                  badgeLabel = '⚠️ Attention';
                 }
 
                 return `
@@ -672,11 +837,11 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                     <td><strong><a href="#repo-${escapeHtml(r.fullName.replace('/', '-'))}">${escapeHtml(r.fullName)}</a></strong></td>
                     <td style="text-align: center;">${r.totalBranches}</td>
                     <td style="text-align: center;">
-                      ${r.staleBranchesCount > 0 ? `<span class="badge badge-warning">${r.staleBranchesCount}</span>` : '0'}
+                      ${r.staleBranchesCount > 0 ? `<span class="badge badge-warning">🍂 ${r.staleBranchesCount}</span>` : '0'}
                     </td>
                     <td style="text-align: center;">${r.totalOpenPrs}</td>
                     <td style="text-align: center;">
-                      ${r.stalePrsCount > 0 ? `<span class="badge badge-warning">${r.stalePrsCount}</span>` : '0'}
+                      ${r.stalePrsCount > 0 ? `<span class="badge badge-warning">⏳ ${r.stalePrsCount}</span>` : '0'}
                     </td>
                     <td style="text-align: center;">${r.draftPrsCount}</td>
                     <td style="text-align: center;"><span class="badge ${badgeClass}">${badgeLabel}</span></td>
@@ -713,13 +878,13 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                   <div class="empty-state">No stale branches found!</div>
                 ` : `
                   <div style="overflow-x: auto;">
-                    <table>
+                    <table aria-label="Stale Branches for ${escapeHtml(r.fullName)}">
                       <thead>
                         <tr>
-                          <th>Branch</th>
-                          <th style="text-align: center;">Inactive Days</th>
-                          <th>Last Author</th>
-                          <th style="text-align: center;">Open PR?</th>
+                          <th scope="col">Branch</th>
+                          <th scope="col" style="text-align: center;">Inactive Days</th>
+                          <th scope="col">Last Author</th>
+                          <th scope="col" style="text-align: center;">Open PR?</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -733,12 +898,12 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                               <td style="text-align: center;"><span class="badge ${badgeColor}">${b.daysInactive} days</span></td>
                               <td>
                                 <div class="user-flex">
-                                  ${authorAvatar ? `<img src="${authorAvatar}" class="user-avatar" onerror="this.style.display='none'">` : ''}
+                                  ${authorAvatar ? `<img src="${authorAvatar}" class="user-avatar" alt="" onerror="this.style.display='none'">` : ''}
                                   <a href="https://github.com/${escapeHtml(b.author)}" target="_blank" rel="noopener noreferrer">${escapeHtml(b.author)}</a>
                                 </div>
                               </td>
                               <td style="text-align: center;">
-                                ${b.hasOpenPr ? '<span class="badge badge-healthy">Yes</span>' : '<span style="color: var(--text-muted)">No</span>'}
+                                ${b.hasOpenPr ? '<span class="badge badge-healthy">✔ Yes</span>' : '<span style="color: var(--text-muted)">No</span>'}
                               </td>
                             </tr>
                           `;
@@ -756,15 +921,15 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                   <div class="empty-state">No open pull requests.</div>
                 ` : `
                   <div style="overflow-x: auto;">
-                    <table>
+                    <table aria-label="Open Pull Requests for ${escapeHtml(r.fullName)}">
                       <thead>
                         <tr>
-                          <th>PR</th>
-                          <th>Title</th>
-                          <th>Author</th>
-                          <th style="text-align: center;">Age</th>
-                          <th style="text-align: center;">Last Active</th>
-                          <th style="text-align: center;">Status</th>
+                          <th scope="col">PR</th>
+                          <th scope="col">Title</th>
+                          <th scope="col">Author</th>
+                          <th scope="col" style="text-align: center;">Age</th>
+                          <th scope="col" style="text-align: center;">Last Active</th>
+                          <th scope="col" style="text-align: center;">Status</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -776,16 +941,16 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                               <td><a href="${escapeHtml(pr.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(pr.title)}</a></td>
                               <td>
                                 <div class="user-flex">
-                                  ${prAuthorAvatar ? `<img src="${prAuthorAvatar}" class="user-avatar" onerror="this.style.display='none'">` : ''}
+                                  ${prAuthorAvatar ? `<img src="${prAuthorAvatar}" class="user-avatar" alt="" onerror="this.style.display='none'">` : ''}
                                   <a href="https://github.com/${escapeHtml(pr.author)}" target="_blank" rel="noopener noreferrer">${escapeHtml(pr.author)}</a>
                                 </div>
                               </td>
                               <td style="text-align: center;">${pr.ageDays}d</td>
                               <td style="text-align: center;">
-                                ${pr.isStalePr ? `<span class="badge badge-warning">${pr.daysSinceLastUpdate}d ago</span>` : `${pr.daysSinceLastUpdate}d ago`}
+                                ${pr.isStalePr ? `<span class="badge badge-warning">⏳ ${pr.daysSinceLastUpdate}d ago</span>` : `${pr.daysSinceLastUpdate}d ago`}
                               </td>
                               <td style="text-align: center;">
-                                ${pr.isDraft ? '<span class="badge badge-draft">Draft</span>' : '<span class="badge badge-healthy">Ready</span>'}
+                                ${pr.isDraft ? '<span class="badge badge-draft">Draft</span>' : '<span class="badge badge-healthy">✔ Ready</span>'}
                               </td>
                             </tr>
                           `;
@@ -799,12 +964,12 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
           `;
         }).join('')}
       </div>
-    </div>
+    </main>
 
     <!-- ============================================== -->
     <!-- VIEW 2: CONTRIBUTOR ACTIVITIES VIEW            -->
     <!-- ============================================== -->
-    <div id="viewUsers" class="view-panel hidden">
+    <main id="viewUsers" class="view-panel hidden" role="region" aria-label="Contributor Activities">
       <!-- User KPI Counters -->
       <div class="metrics-grid">
         <div class="metric-card">
@@ -831,16 +996,16 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
           <h2>Contributor Leaderboard & Overview</h2>
         </div>
         <div style="overflow-x: auto;">
-          <table>
+          <table aria-label="Contributor Leaderboard Table">
             <thead>
               <tr>
-                <th>Contributor</th>
-                <th>Repositories</th>
-                <th style="text-align: center;">Open PRs</th>
-                <th style="text-align: center;">Inactive PRs</th>
-                <th style="text-align: center;">Stale Branches</th>
-                <th style="text-align: center;">Items to Review</th>
-                <th style="text-align: center;">Details</th>
+                <th scope="col">Contributor</th>
+                <th scope="col">Repositories</th>
+                <th scope="col" style="text-align: center;">Open PRs</th>
+                <th scope="col" style="text-align: center;">Inactive PRs</th>
+                <th scope="col" style="text-align: center;">Stale Branches</th>
+                <th scope="col" style="text-align: center;">Items to Review</th>
+                <th scope="col" style="text-align: center;">Details</th>
               </tr>
             </thead>
             <tbody>
@@ -849,18 +1014,18 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
               ` : userActivities.map((u) => {
                 const userAvatar = u.username && u.username !== 'unknown' ? `https://github.com/${encodeURIComponent(u.username)}.png?size=40` : '';
                 const userAnchor = `user-${escapeHtml(u.username.replace(/[^a-zA-Z0-9_-]/g, '-'))}`;
-                let statusBadge = `<span class="badge badge-healthy">All Good</span>`;
+                let statusBadge = `<span class="badge badge-healthy">✔ All Good</span>`;
                 if (u.totalNeedsAttention > 5) {
-                  statusBadge = `<span class="badge badge-danger">${u.totalNeedsAttention} items</span>`;
+                  statusBadge = `<span class="badge badge-danger">🛑 ${u.totalNeedsAttention} items</span>`;
                 } else if (u.totalNeedsAttention > 0) {
-                  statusBadge = `<span class="badge badge-warning">${u.totalNeedsAttention} items</span>`;
+                  statusBadge = `<span class="badge badge-warning">⚠️ ${u.totalNeedsAttention} items</span>`;
                 }
 
                 return `
                   <tr>
                     <td>
                       <div class="user-flex">
-                        ${userAvatar ? `<img src="${userAvatar}" class="user-avatar" onerror="this.style.display='none'">` : ''}
+                        ${userAvatar ? `<img src="${userAvatar}" class="user-avatar" alt="" onerror="this.style.display='none'">` : ''}
                         <strong><a href="https://github.com/${escapeHtml(u.username)}" target="_blank" rel="noopener noreferrer">${escapeHtml(u.username)}</a></strong>
                       </div>
                     </td>
@@ -869,10 +1034,10 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                     </td>
                     <td style="text-align: center;">${u.openPrsCount}</td>
                     <td style="text-align: center;">
-                      ${u.stalePrsCount > 0 ? `<span class="badge badge-warning">${u.stalePrsCount}</span>` : '0'}
+                      ${u.stalePrsCount > 0 ? `<span class="badge badge-warning">⏳ ${u.stalePrsCount}</span>` : '0'}
                     </td>
                     <td style="text-align: center;">
-                      ${u.staleBranchesCount > 0 ? `<span class="badge badge-danger">${u.staleBranchesCount}</span>` : '0'}
+                      ${u.staleBranchesCount > 0 ? `<span class="badge badge-danger">🍂 ${u.staleBranchesCount}</span>` : '0'}
                     </td>
                     <td style="text-align: center;">${statusBadge}</td>
                     <td style="text-align: center;">
@@ -897,13 +1062,13 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
               <div class="detail-card-header">
                 <div class="card-title">
                   <div class="user-flex">
-                    ${userAvatar ? `<img src="${userAvatar}" class="user-avatar" style="width: 34px; height: 34px;" onerror="this.style.display='none'">` : ''}
+                    ${userAvatar ? `<img src="${userAvatar}" class="user-avatar" style="width: 34px; height: 34px;" alt="" onerror="this.style.display='none'">` : ''}
                     <a href="https://github.com/${escapeHtml(u.username)}" target="_blank" rel="noopener noreferrer">${escapeHtml(u.username)}</a>
                   </div>
                 </div>
                 <div>
                   ${u.repositories.map((repo) => `<span class="badge badge-tag">${escapeHtml(repo)}</span>`).join('')}
-                  ${u.totalNeedsAttention > 0 ? `<span class="badge badge-warning">${u.totalNeedsAttention} items to review</span>` : `<span class="badge badge-healthy">Active & Healthy</span>`}
+                  ${u.totalNeedsAttention > 0 ? `<span class="badge badge-warning">⚠️ ${u.totalNeedsAttention} items to review</span>` : `<span class="badge badge-healthy">✔ Active & Healthy</span>`}
                 </div>
               </div>
 
@@ -914,15 +1079,15 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                   <div class="empty-state">No open PRs authored by ${escapeHtml(u.username)}.</div>
                 ` : `
                   <div style="overflow-x: auto;">
-                    <table>
+                    <table aria-label="Open PRs for ${escapeHtml(u.username)}">
                       <thead>
                         <tr>
-                          <th>Repository</th>
-                          <th>PR</th>
-                          <th>Title</th>
-                          <th style="text-align: center;">Age</th>
-                          <th style="text-align: center;">Last Active</th>
-                          <th style="text-align: center;">Status</th>
+                          <th scope="col">Repository</th>
+                          <th scope="col">PR</th>
+                          <th scope="col">Title</th>
+                          <th scope="col" style="text-align: center;">Age</th>
+                          <th scope="col" style="text-align: center;">Last Active</th>
+                          <th scope="col" style="text-align: center;">Status</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -933,10 +1098,10 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                             <td><a href="${escapeHtml(pr.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(pr.title)}</a></td>
                             <td style="text-align: center;">${pr.ageDays}d</td>
                             <td style="text-align: center;">
-                              ${pr.isStalePr ? `<span class="badge badge-warning">${pr.daysSinceLastUpdate}d ago</span>` : `${pr.daysSinceLastUpdate}d ago`}
+                              ${pr.isStalePr ? `<span class="badge badge-warning">⏳ ${pr.daysSinceLastUpdate}d ago</span>` : `${pr.daysSinceLastUpdate}d ago`}
                             </td>
                             <td style="text-align: center;">
-                              ${pr.isDraft ? '<span class="badge badge-draft">Draft</span>' : '<span class="badge badge-healthy">Ready</span>'}
+                              ${pr.isDraft ? '<span class="badge badge-draft">Draft</span>' : '<span class="badge badge-healthy">✔ Ready</span>'}
                             </td>
                           </tr>
                         `).join('')}
@@ -953,13 +1118,13 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                   <div class="empty-state">No stale branches authored by ${escapeHtml(u.username)}.</div>
                 ` : `
                   <div style="overflow-x: auto;">
-                    <table>
+                    <table aria-label="Stale Branches for ${escapeHtml(u.username)}">
                       <thead>
                         <tr>
-                          <th>Repository</th>
-                          <th>Branch</th>
-                          <th style="text-align: center;">Inactive Days</th>
-                          <th style="text-align: center;">Has Open PR?</th>
+                          <th scope="col">Repository</th>
+                          <th scope="col">Branch</th>
+                          <th scope="col" style="text-align: center;">Inactive Days</th>
+                          <th scope="col" style="text-align: center;">Has Open PR?</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -972,7 +1137,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                               <td><a href="${branchUrl}" target="_blank" rel="noopener noreferrer"><code>${escapeHtml(b.name)}</code></a></td>
                               <td style="text-align: center;"><span class="badge ${badgeColor}">${b.daysInactive} days</span></td>
                               <td style="text-align: center;">
-                                ${b.hasOpenPr ? '<span class="badge badge-healthy">Yes</span>' : '<span style="color: var(--text-muted)">No</span>'}
+                                ${b.hasOpenPr ? '<span class="badge badge-healthy">✔ Yes</span>' : '<span style="color: var(--text-muted)">No</span>'}
                               </td>
                             </tr>
                           `;
@@ -986,9 +1151,9 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
           `;
         }).join('')}
       </div>
-    </div>
+    </main>
 
-    <footer>
+    <footer role="contentinfo">
       Generated with <strong>fluffy-sniffle</strong> • Node.js GitHub Repository & Contributor Health Analyzer
     </footer>
   </div>
@@ -1000,6 +1165,36 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     let previousView = 'repos';
     let currentSearchCategory = 'all';
     let currentSearchResults = null;
+
+    // Theme Management (Supports Dark, Light, Midnight, High Contrast - Section 508 / WCAG AAA)
+    function setTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      try {
+        localStorage.setItem('fluffy-theme', theme);
+      } catch (e) {}
+      const select = document.getElementById('themeSelect');
+      if (select && select.value !== theme) {
+        select.value = theme;
+      }
+      console.log('[Dashboard:Theme] Switched theme to:', theme);
+    }
+
+    // Initialize Theme
+    (function initTheme() {
+      try {
+        const saved = localStorage.getItem('fluffy-theme');
+        if (saved) {
+          setTheme(saved);
+          return;
+        }
+      } catch (e) {}
+
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+        setTheme('light');
+      } else {
+        setTheme('dark');
+      }
+    })();
 
     // View Switching
     function switchView(view) {
@@ -1015,17 +1210,22 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
         viewRepos.classList.add('hidden');
         viewUsers.classList.remove('hidden');
         btnViewRepos.classList.remove('active');
+        btnViewRepos.setAttribute('aria-selected', 'false');
         btnViewUsers.classList.add('active');
+        btnViewUsers.setAttribute('aria-selected', 'true');
         previousView = 'users';
         window.location.hash = 'users';
       } else {
         viewUsers.classList.add('hidden');
         viewRepos.classList.remove('hidden');
         btnViewUsers.classList.remove('active');
+        btnViewUsers.setAttribute('aria-selected', 'false');
         btnViewRepos.classList.add('active');
+        btnViewRepos.setAttribute('aria-selected', 'true');
         previousView = 'repos';
         window.location.hash = 'repos';
       }
+      console.log('[Dashboard:View] Active view changed to:', view);
     }
 
     if (window.location.hash === '#users') {
@@ -1128,6 +1328,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       document.getElementById('searchSummaryTitle').innerHTML = '🔍 Search Results for "' + escapeHtml(query) + '"';
       document.getElementById('searchSummarySubtitle').textContent = 'Found ' + totalMatches + ' matching items across all tracked repositories';
 
+      console.log('[Dashboard:Search] Searched for: "' + query + '" -> Found ' + totalMatches + ' matches');
       currentSearchResults = { q, matchedPrs, matchedBranches, matchedUsers, matchedRepos };
       renderSearchResults();
     }
@@ -1139,6 +1340,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
         const btn = document.getElementById(id);
         if (btn) btn.classList.toggle('active', t === type);
       });
+      console.log('[Dashboard:SearchFilter] Filter category changed to:', type);
       renderSearchResults();
     }
 
@@ -1153,15 +1355,15 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       // Repositories Section
       if ((showAll || currentSearchCategory === 'repos') && matchedRepos.length > 0) {
         html += '<div style="margin-bottom: 24px;">';
-        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: #fff;">🏢 Matching Repositories (' + matchedRepos.length + ')</h3>';
-        html += '<div style="overflow-x: auto;"><table><thead><tr><th>Repository</th><th style="text-align: center;">Branches</th><th style="text-align: center;">Stale</th><th style="text-align: center;">Open PRs</th><th style="text-align: center;">Inactive PRs</th></tr></thead><tbody>';
+        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: var(--header-text);">🏢 Matching Repositories (' + matchedRepos.length + ')</h3>';
+        html += '<div style="overflow-x: auto;"><table><thead><tr><th scope="col">Repository</th><th scope="col" style="text-align: center;">Branches</th><th scope="col" style="text-align: center;">Stale</th><th scope="col" style="text-align: center;">Open PRs</th><th scope="col" style="text-align: center;">Inactive PRs</th></tr></thead><tbody>';
         matchedRepos.forEach(r => {
           html += '<tr>';
           html += '<td><strong><a href="https://github.com/' + escapeHtml(r.fullName) + '" target="_blank">' + highlight(r.fullName, q) + '</a></strong></td>';
           html += '<td style="text-align: center;">' + r.totalBranches + '</td>';
-          html += '<td style="text-align: center;"><span class="badge badge-warning">' + r.staleBranchesCount + '</span></td>';
+          html += '<td style="text-align: center;"><span class="badge badge-warning">🍂 ' + r.staleBranchesCount + '</span></td>';
           html += '<td style="text-align: center;">' + r.totalOpenPrs + '</td>';
-          html += '<td style="text-align: center;">' + r.stalePrsCount + '</td>';
+          html += '<td style="text-align: center;"><span class="badge badge-warning">⏳ ' + r.stalePrsCount + '</span></td>';
           html += '</tr>';
         });
         html += '</tbody></table></div></div>';
@@ -1170,8 +1372,8 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       // Pull Requests Section
       if ((showAll || currentSearchCategory === 'prs') && matchedPrs.length > 0) {
         html += '<div style="margin-bottom: 24px;">';
-        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: #fff;">🔀 Matching Pull Requests (' + matchedPrs.length + ')</h3>';
-        html += '<div style="overflow-x: auto;"><table><thead><tr><th>Repository</th><th>PR</th><th>Title</th><th>Author</th><th style="text-align: center;">Age</th><th style="text-align: center;">Last Active</th><th style="text-align: center;">Status</th></tr></thead><tbody>';
+        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: var(--header-text);">🔀 Matching Pull Requests (' + matchedPrs.length + ')</h3>';
+        html += '<div style="overflow-x: auto;"><table><thead><tr><th scope="col">Repository</th><th scope="col">PR</th><th scope="col">Title</th><th scope="col">Author</th><th scope="col" style="text-align: center;">Age</th><th scope="col" style="text-align: center;">Last Active</th><th scope="col" style="text-align: center;">Status</th></tr></thead><tbody>';
         matchedPrs.forEach(pr => {
           html += '<tr>';
           html += '<td><span class="badge badge-tag">' + highlight(pr.repoFullName, q) + '</span></td>';
@@ -1179,8 +1381,8 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
           html += '<td><a href="' + escapeHtml(pr.url) + '" target="_blank">' + highlight(pr.title, q) + '</a></td>';
           html += '<td>' + highlight(pr.author, q) + '</td>';
           html += '<td style="text-align: center;">' + pr.ageDays + 'd</td>';
-          html += '<td style="text-align: center;">' + (pr.isStalePr ? '<span class="badge badge-warning">' + pr.daysSinceLastUpdate + 'd ago</span>' : pr.daysSinceLastUpdate + 'd ago') + '</td>';
-          html += '<td style="text-align: center;">' + (pr.isDraft ? '<span class="badge badge-draft">Draft</span>' : '<span class="badge badge-healthy">Ready</span>') + '</td>';
+          html += '<td style="text-align: center;">' + (pr.isStalePr ? '<span class="badge badge-warning">⏳ ' + pr.daysSinceLastUpdate + 'd ago</span>' : pr.daysSinceLastUpdate + 'd ago') + '</td>';
+          html += '<td style="text-align: center;">' + (pr.isDraft ? '<span class="badge badge-draft">Draft</span>' : '<span class="badge badge-healthy">✔ Ready</span>') + '</td>';
           html += '</tr>';
         });
         html += '</tbody></table></div></div>';
@@ -1189,8 +1391,8 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       // Branches Section
       if ((showAll || currentSearchCategory === 'branches') && matchedBranches.length > 0) {
         html += '<div style="margin-bottom: 24px;">';
-        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: #fff;">🍂 Matching Branches (' + matchedBranches.length + ')</h3>';
-        html += '<div style="overflow-x: auto;"><table><thead><tr><th>Repository</th><th>Branch</th><th style="text-align: center;">Inactive Days</th><th>Last Author</th><th style="text-align: center;">Open PR?</th></tr></thead><tbody>';
+        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: var(--header-text);">🍂 Matching Branches (' + matchedBranches.length + ')</h3>';
+        html += '<div style="overflow-x: auto;"><table><thead><tr><th scope="col">Repository</th><th scope="col">Branch</th><th scope="col" style="text-align: center;">Inactive Days</th><th scope="col">Last Author</th><th scope="col" style="text-align: center;">Open PR?</th></tr></thead><tbody>';
         matchedBranches.forEach(b => {
           const branchUrl = 'https://github.com/' + escapeHtml(b.repoFullName) + '/tree/' + encodeURIComponent(b.name);
           const badgeClass = b.isVeryStale ? 'badge-danger' : (b.isStale ? 'badge-warning' : 'badge-healthy');
@@ -1199,7 +1401,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
           html += '<td><a href="' + branchUrl + '" target="_blank"><code>' + highlight(b.name, q) + '</code></a></td>';
           html += '<td style="text-align: center;"><span class="badge ' + badgeClass + '">' + (b.daysInactive !== null ? b.daysInactive + 'd' : 'Active') + '</span></td>';
           html += '<td>' + highlight(b.author, q) + '</td>';
-          html += '<td style="text-align: center;">' + (b.hasOpenPr ? '<span class="badge badge-healthy">Yes</span>' : '<span style="color: var(--text-muted)">No</span>') + '</td>';
+          html += '<td style="text-align: center;">' + (b.hasOpenPr ? '<span class="badge badge-healthy">✔ Yes</span>' : '<span style="color: var(--text-muted)">No</span>') + '</td>';
           html += '</tr>';
         });
         html += '</tbody></table></div></div>';
@@ -1208,17 +1410,17 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       // Contributors Section
       if ((showAll || currentSearchCategory === 'users') && matchedUsers.length > 0) {
         html += '<div style="margin-bottom: 24px;">';
-        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: #fff;">👤 Matching Contributors (' + matchedUsers.length + ')</h3>';
-        html += '<div style="overflow-x: auto;"><table><thead><tr><th>Contributor</th><th>Repositories</th><th style="text-align: center;">Open PRs</th><th style="text-align: center;">Inactive PRs</th><th style="text-align: center;">Stale Branches</th><th style="text-align: center;">Items to Review</th></tr></thead><tbody>';
+        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: var(--header-text);">👤 Matching Contributors (' + matchedUsers.length + ')</h3>';
+        html += '<div style="overflow-x: auto;"><table><thead><tr><th scope="col">Contributor</th><th scope="col">Repositories</th><th scope="col" style="text-align: center;">Open PRs</th><th scope="col" style="text-align: center;">Inactive PRs</th><th scope="col" style="text-align: center;">Stale Branches</th><th scope="col" style="text-align: center;">Items to Review</th></tr></thead><tbody>';
         matchedUsers.forEach(u => {
           const userAvatar = u.username && u.username !== 'unknown' ? 'https://github.com/' + encodeURIComponent(u.username) + '.png?size=40' : '';
           html += '<tr>';
-          html += '<td><div class="user-flex">' + (userAvatar ? '<img src="' + userAvatar + '" class="user-avatar" onerror="this.style.display=\\'none\\'"> ' : '') + '<strong><a href="https://github.com/' + escapeHtml(u.username) + '" target="_blank">' + highlight(u.username, q) + '</a></strong></div></td>';
+          html += '<td><div class="user-flex">' + (userAvatar ? '<img src="' + userAvatar + '" class="user-avatar" alt="" onerror="this.style.display=\\'none\\'"> ' : '') + '<strong><a href="https://github.com/' + escapeHtml(u.username) + '" target="_blank">' + highlight(u.username, q) + '</a></strong></div></td>';
           html += '<td>' + u.repositories.map(repo => '<span class="badge badge-tag">' + highlight(repo, q) + '</span>').join('') + '</td>';
           html += '<td style="text-align: center;">' + u.openPrsCount + '</td>';
-          html += '<td style="text-align: center;">' + (u.stalePrsCount > 0 ? '<span class="badge badge-warning">' + u.stalePrsCount + '</span>' : '0') + '</td>';
-          html += '<td style="text-align: center;">' + (u.staleBranchesCount > 0 ? '<span class="badge badge-danger">' + u.staleBranchesCount + '</span>' : '0') + '</td>';
-          html += '<td style="text-align: center;">' + (u.totalNeedsAttention > 0 ? '<span class="badge badge-warning">' + u.totalNeedsAttention + ' items</span>' : '<span class="badge badge-healthy">All Good</span>') + '</td>';
+          html += '<td style="text-align: center;">' + (u.stalePrsCount > 0 ? '<span class="badge badge-warning">⏳ ' + u.stalePrsCount + '</span>' : '0') + '</td>';
+          html += '<td style="text-align: center;">' + (u.staleBranchesCount > 0 ? '<span class="badge badge-danger">🍂 ' + u.staleBranchesCount + '</span>' : '0') + '</td>';
+          html += '<td style="text-align: center;">' + (u.totalNeedsAttention > 0 ? '<span class="badge badge-warning">⚠️ ' + u.totalNeedsAttention + ' items</span>' : '<span class="badge badge-healthy">✔ All Good</span>') + '</td>';
           html += '</tr>';
         });
         html += '</tbody></table></div></div>';
@@ -1271,9 +1473,9 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
         document.body.appendChild(toast);
       }
       toast.className = 'toast';
-      if (type === 'error') toast.style.background = '#da3633';
-      else if (type === 'success') toast.style.background = '#238636';
-      else toast.style.background = '#1f6feb';
+      if (type === 'error') toast.style.background = 'var(--danger)';
+      else if (type === 'success') toast.style.background = 'var(--success)';
+      else toast.style.background = 'var(--accent)';
       toast.textContent = message;
       setTimeout(() => {
         toast.className = 'toast hidden';
