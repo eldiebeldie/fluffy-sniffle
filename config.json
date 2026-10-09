@@ -3,6 +3,10 @@
   "warnStaleDays": 60,
   "repositories": [
     {
+      "owner": "eldiebeldie",
+      "repo": "fluffy-sniffle"
+    },
+    {
       "owner": "expressjs",
       "repo": "express"
     },
@@ -17,6 +21,10 @@
     {
       "owner": "sindresorhus",
       "repo": "chalk"
+    },
+    {
+      "owner": "chubin",
+      "repo": "wttr.in"
     }
   ]
 }
