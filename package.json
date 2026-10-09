@@ -18,7 +18,7 @@
     "repository-health",
     "octokit"
   ],
-  "author": "",
+  "author": "EldieBeldie <eldargr@gmail.com>",
   "license": "MIT",
   "dependencies": {
     "@octokit/rest": "^21.1.1",
