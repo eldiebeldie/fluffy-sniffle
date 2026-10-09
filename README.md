@@ -21,9 +21,10 @@
 
 | Detail | Information |
 | :--- | :--- |
-| **Creator** | **EldieBeldie** |
+| **Creator & Owner** | **EldieBeldie** |
 | **GitHub** | [@EldieBeldie](https://github.com/EldieBeldie) |
 | **Email** | [eldargr@gmail.com](mailto:eldargr@gmail.com) |
+| **Code Ownership** | Defined in [`.github/CODEOWNERS`](.github/CODEOWNERS) (`@EldieBeldie`) |
 | **Project** | [fluffy-sniffle](https://github.com/EldieBeldie/fluffy-sniffle) |
 
 > *"Built to provide engineering teams with crystal-clear visibility into repository hygiene, cross-project contributor momentum, and open PR bottlenecks without friction."*

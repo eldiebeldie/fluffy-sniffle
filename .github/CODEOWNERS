@@ -1,0 +1,12 @@
+# GitHub Code Owners
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything in the repository
+* @EldieBeldie eldargr@gmail.com
+
+# Core engine, dashboard, and server
+/src/ @EldieBeldie
+/config.json @EldieBeldie
+/package.json @EldieBeldie
+/README.md @EldieBeldie
+/.github/ @EldieBeldie
