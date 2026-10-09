@@ -48,15 +48,18 @@ async function fetchViaGraphQL(owner, repo) {
             }
           }
         }
-        pullRequests(states: OPEN, first: 100, orderBy: { field: CREATED_AT, direction: DESC }) {
+        pullRequests(first: 100, orderBy: { field: CREATED_AT, direction: DESC }) {
           totalCount
           nodes {
             number
             title
             url
+            state
             isDraft
             createdAt
             updatedAt
+            closedAt
+            mergedAt
             headRefName
             author {
               login
@@ -65,6 +68,9 @@ async function fetchViaGraphQL(owner, repo) {
               totalCount
             }
           }
+        }
+        openPullRequests: pullRequests(states: OPEN) {
+          totalCount
         }
       }
     }
@@ -94,16 +100,21 @@ async function fetchViaGraphQL(owner, repo) {
     number: pr.number,
     title: pr.title,
     url: pr.url,
-    isDraft: pr.isDraft,
+    state: pr.state || 'OPEN',
+    isDraft: pr.isDraft || false,
     createdAt: new Date(pr.createdAt),
     updatedAt: new Date(pr.updatedAt),
+    closedAt: pr.closedAt ? new Date(pr.closedAt) : null,
+    mergedAt: pr.mergedAt ? new Date(pr.mergedAt) : null,
     headRefName: pr.headRefName,
     author: pr.author?.login || 'unknown',
     commentsCount: pr.comments?.totalCount || 0,
   }));
 
+  const openPrsCount = repoData.openPullRequests?.totalCount ?? pullRequests.filter((p) => p.state === 'OPEN').length;
+
   logger.info(
-    `[${owner}/${repo}] GraphQL fetch complete: ${branches.length} branches, ${pullRequests.length} open PRs (default branch: ${defaultBranch})`
+    `[${owner}/${repo}] GraphQL fetch complete: ${branches.length} branches, ${pullRequests.length} PRs (${openPrsCount} open, default branch: ${defaultBranch})`
   );
 
   return {
@@ -111,7 +122,8 @@ async function fetchViaGraphQL(owner, repo) {
     defaultBranch,
     isPrivate: repoData.isPrivate,
     totalBranchesCount: repoData.refs?.totalCount || branches.length,
-    totalOpenPrsCount: repoData.pullRequests?.totalCount || pullRequests.length,
+    totalOpenPrsCount: openPrsCount,
+    totalPrsCount: repoData.pullRequests?.totalCount || pullRequests.length,
     branches,
     pullRequests,
   };
@@ -127,25 +139,37 @@ async function fetchViaRest(owner, repo) {
   const { data: repoData } = await octokit.rest.repos.get({ owner, repo });
   const defaultBranch = repoData.default_branch;
 
-  // 2. Fetch open PRs
+  // 2. Fetch PRs across all states (open, merged, closed)
   const { data: prsData } = await octokit.rest.pulls.list({
     owner,
     repo,
-    state: 'open',
+    state: 'all',
     per_page: 100,
   });
 
-  const pullRequests = prsData.map((pr) => ({
-    number: pr.number,
-    title: pr.title,
-    url: pr.html_url,
-    isDraft: pr.draft || false,
-    createdAt: new Date(pr.created_at),
-    updatedAt: new Date(pr.updated_at),
-    headRefName: pr.head.ref,
-    author: pr.user?.login || 'unknown',
-    commentsCount: pr.comments || 0,
-  }));
+  const pullRequests = prsData.map((pr) => {
+    let state = 'OPEN';
+    if (pr.merged_at) {
+      state = 'MERGED';
+    } else if (pr.state === 'closed') {
+      state = 'CLOSED';
+    }
+
+    return {
+      number: pr.number,
+      title: pr.title,
+      url: pr.html_url,
+      state,
+      isDraft: pr.draft || false,
+      createdAt: new Date(pr.created_at),
+      updatedAt: new Date(pr.updated_at),
+      closedAt: pr.closed_at ? new Date(pr.closed_at) : null,
+      mergedAt: pr.merged_at ? new Date(pr.merged_at) : null,
+      headRefName: pr.head?.ref,
+      author: pr.user?.login || 'unknown',
+      commentsCount: pr.comments || 0,
+    };
+  });
 
   // 3. Fetch branches
   const { data: branchesData } = await octokit.rest.repos.listBranches({
@@ -180,8 +204,10 @@ async function fetchViaRest(owner, repo) {
     })
   );
 
+  const openPrsCount = pullRequests.filter((p) => p.state === 'OPEN').length;
+
   logger.info(
-    `[${owner}/${repo}] REST fetch complete: ${branches.length} branches, ${pullRequests.length} open PRs (default branch: ${defaultBranch})`
+    `[${owner}/${repo}] REST fetch complete: ${branches.length} branches, ${pullRequests.length} PRs (${openPrsCount} open, default branch: ${defaultBranch})`
   );
 
   return {
@@ -189,7 +215,8 @@ async function fetchViaRest(owner, repo) {
     defaultBranch,
     isPrivate: repoData.private,
     totalBranchesCount: branchesData.length,
-    totalOpenPrsCount: pullRequests.length,
+    totalOpenPrsCount: openPrsCount,
+    totalPrsCount: pullRequests.length,
     branches,
     pullRequests,
   };

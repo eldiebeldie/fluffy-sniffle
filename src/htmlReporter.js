@@ -27,6 +27,8 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
   const totalBranches = results.reduce((acc, r) => acc + (r.totalBranches || 0), 0);
   const totalStaleBranches = results.reduce((acc, r) => acc + (r.staleBranchesCount || 0), 0);
   const totalOpenPrs = results.reduce((acc, r) => acc + (r.totalOpenPrs || 0), 0);
+  const totalAllPrs = results.reduce((acc, r) => acc + (r.totalAllPrs || r.totalOpenPrs || 0), 0);
+  const totalMergedPrs = results.reduce((acc, r) => acc + (r.mergedPrsCount || 0), 0);
   const totalStalePrs = results.reduce((acc, r) => acc + (r.stalePrsCount || 0), 0);
   const totalDraftPrs = results.reduce((acc, r) => acc + (r.draftPrsCount || 0), 0);
 
@@ -35,6 +37,13 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
   const contributorsWithStaleBranches = userActivities.filter((u) => u.staleBranchesCount > 0).length;
   const contributorsWithStalePrs = userActivities.filter((u) => u.stalePrsCount > 0).length;
   const totalReviewItems = userActivities.reduce((acc, u) => acc + u.totalNeedsAttention, 0);
+
+  function formatDisplayDate(dateVal) {
+    if (!dateVal) return '—';
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return '—';
+    return d.toISOString().split('T')[0];
+  }
 
   // Safe JSON serialization of dashboard data for client-side search engine
   const dashboardDataJson = JSON.stringify({ results, userActivities }).replace(/</g, '\\u003c');
@@ -144,6 +153,30 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       --table-hover: #212121;
       --focus-ring: #f2cc60;
       --chip-active-bg: #18385e;
+    }
+
+    [data-theme="high-contrast"] .badge-merged {
+      border: 1px solid #d2a8ff;
+      color: #d2a8ff;
+      background: #261138;
+    }
+
+    [data-theme="high-contrast"] .badge-closed {
+      border: 1px solid #ffffff;
+      color: #ffffff;
+      background: #222222;
+    }
+
+    [data-theme="high-contrast"] .scope-btn.active {
+      border: 2px solid #ffffff;
+      color: #ffffff;
+      background: #222222;
+    }
+
+    [data-theme="high-contrast"] .card-tab-btn.active {
+      border: 2px solid #ffffff;
+      color: #ffffff;
+      background: #112a45;
     }
 
     /* --------------------------------------------------
@@ -569,6 +602,30 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       border: 1px solid var(--border);
     }
 
+    .badge-merged {
+      background: rgba(168, 85, 247, 0.15);
+      color: #a855f7;
+      border: 1px solid rgba(168, 85, 247, 0.5);
+    }
+
+    .badge-closed {
+      background: rgba(148, 163, 184, 0.15);
+      color: #94a3b8;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+    }
+
+    .badge-active {
+      background: var(--success-bg);
+      color: var(--success);
+      border: 1px solid var(--success);
+    }
+
+    .badge-info {
+      background: var(--accent-bg);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+    }
+
     .badge-tag {
       background: var(--accent-bg);
       color: var(--accent);
@@ -576,6 +633,119 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       font-family: monospace;
       margin-right: 4px;
       margin-bottom: 4px;
+    }
+
+    /* Scope Toolbar & Option Switcher */
+    .scope-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-bottom: 24px;
+      padding: 14px 18px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .scope-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--table-hover);
+      padding: 4px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .scope-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .scope-btn:hover {
+      color: var(--header-text);
+    }
+
+    .scope-btn.active {
+      background: var(--card-bg);
+      color: var(--header-text);
+      border-color: var(--border);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+    }
+
+    /* Dynamic column and row visibility based on scope */
+    .scope-attention .col-scope-all {
+      display: none !important;
+    }
+
+    .scope-all-time .col-scope-attention {
+      display: none !important;
+    }
+
+    .scope-attention .row-scope-all-only,
+    .scope-attention .card-scope-all-only {
+      display: none !important;
+    }
+
+    /* Contributor Detail All-Time Stats and Tabs */
+    .user-all-time-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .summary-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+
+    .summary-pill .sub-stat {
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
+    .card-filter-tabs {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .card-tab-btn {
+      background: var(--table-hover);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .card-tab-btn:hover {
+      color: var(--header-text);
+      border-color: var(--accent);
+    }
+
+    .card-tab-btn.active {
+      background: var(--accent);
+      color: #ffffff;
+      border-color: var(--accent);
     }
 
     /* Card Details */
@@ -989,24 +1159,50 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     <!-- ============================================== -->
     <!-- VIEW 2: CONTRIBUTOR ACTIVITIES VIEW            -->
     <!-- ============================================== -->
-    <main id="viewUsers" class="view-panel hidden" role="region" aria-label="Contributor Activities">
+    <!-- ============================================== -->
+    <!-- VIEW 2: CONTRIBUTOR ACTIVITIES VIEW            -->
+    <!-- ============================================== -->
+    <main id="viewUsers" class="view-panel hidden scope-all-time" role="region" aria-label="Contributor Activities">
       <!-- User KPI Counters -->
       <div class="metrics-grid">
         <div class="metric-card">
           <div class="metric-value">${totalContributors}</div>
-          <div class="metric-label">Active Contributors</div>
+          <div class="metric-label">Contributors Analyzed</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value" style="color: #a855f7;">${totalAllPrs}</div>
+          <div class="metric-label">All-Time PRs (${totalMergedPrs} Merged)</div>
         </div>
         <div class="metric-card">
           <div class="metric-value ${contributorsWithStaleBranches > 0 ? 'warning' : ''}">${contributorsWithStaleBranches}</div>
           <div class="metric-label">Users w/ Stale Branches</div>
         </div>
         <div class="metric-card">
-          <div class="metric-value ${contributorsWithStalePrs > 0 ? 'warning' : ''}">${contributorsWithStalePrs}</div>
-          <div class="metric-label">Users w/ Inactive PRs</div>
-        </div>
-        <div class="metric-card">
           <div class="metric-value ${totalReviewItems > 0 ? 'warning' : ''}">${totalReviewItems}</div>
           <div class="metric-label">Items Needing Review</div>
+        </div>
+      </div>
+
+      <!-- Scope Toolbar & Option Switcher -->
+      <div class="scope-toolbar">
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+          <span style="font-weight: 700; font-size: 14px; color: var(--header-text); display: inline-flex; align-items: center; gap: 6px;">
+            <span>⏱️</span> Contributor Detail Option:
+          </span>
+          <div class="scope-control" role="group" aria-label="Contributor Activity Option">
+            <button type="button" class="scope-btn active" id="btnScopeAllTime" onclick="setContributorScope('all_time')">
+              🌐 All Times (Complete History)
+            </button>
+            <button type="button" class="scope-btn" id="btnScopeAttention" onclick="setContributorScope('attention')">
+              ⚠️ Needs Attention Only
+            </button>
+          </div>
+          <span id="scopeHint" style="font-size: 12px; color: var(--text-muted);">
+            Showing full contributor history: merged, open, and closed PRs plus all branches.
+          </span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <input type="text" id="filterContributorInput" class="search-input" style="width: 240px; padding: 6px 12px;" placeholder="Filter contributor by name..." oninput="filterContributorList(this.value)">
         </div>
       </div>
 
@@ -1021,16 +1217,19 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
               <tr>
                 <th scope="col">Contributor</th>
                 <th scope="col">Repositories</th>
-                <th scope="col" style="text-align: center;">Open PRs</th>
-                <th scope="col" style="text-align: center;">Inactive PRs</th>
-                <th scope="col" style="text-align: center;">Stale Branches</th>
-                <th scope="col" style="text-align: center;">Items to Review</th>
+                <th scope="col" class="col-scope-all" style="text-align: center;">All-Time PRs</th>
+                <th scope="col" class="col-scope-all" style="text-align: center;">All-Time Branches</th>
+                <th scope="col" class="col-scope-all" style="text-align: center;">Merge Rate</th>
+                <th scope="col" class="col-scope-attention" style="text-align: center;">Open PRs</th>
+                <th scope="col" class="col-scope-attention" style="text-align: center;">Inactive PRs</th>
+                <th scope="col" class="col-scope-attention" style="text-align: center;">Stale Branches</th>
+                <th scope="col" style="text-align: center;">Status / Review</th>
                 <th scope="col" style="text-align: center;">Details</th>
               </tr>
             </thead>
             <tbody>
               ${userActivities.length === 0 ? `
-                <tr><td colspan="7" class="empty-state">No contributors analyzed yet.</td></tr>
+                <tr><td colspan="10" class="empty-state">No contributors analyzed yet.</td></tr>
               ` : userActivities.map((u) => {
                 const userAvatar = u.username && u.username !== 'unknown' ? `https://github.com/${encodeURIComponent(u.username)}.png?size=40` : '';
                 const userAnchor = `user-${escapeHtml(u.username.replace(/[^a-zA-Z0-9_-]/g, '-'))}`;
@@ -1042,7 +1241,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                 }
 
                 return `
-                  <tr>
+                  <tr class="contributor-row ${u.totalNeedsAttention === 0 ? 'row-scope-all-only' : ''}" data-username="${escapeHtml(u.username.toLowerCase())}">
                     <td>
                       <div class="user-flex">
                         ${userAvatar ? `<img src="${userAvatar}" class="user-avatar" alt="" onerror="this.style.display='none'">` : ''}
@@ -1052,13 +1251,32 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
                     <td>
                       ${u.repositories.map((repo) => `<span class="badge badge-tag">${escapeHtml(repo)}</span>`).join('')}
                     </td>
-                    <td style="text-align: center;">${u.openPrsCount}</td>
-                    <td style="text-align: center;">
+                    <!-- All-Time PRs column -->
+                    <td class="col-scope-all" style="text-align: center;">
+                      <span class="badge badge-tag" title="Total All-Time PRs">${u.allPrsCount} Total</span>
+                      ${u.mergedPrsCount > 0 ? `<span class="badge badge-merged" title="Merged PRs">🟣 ${u.mergedPrsCount}</span>` : ''}
+                      ${u.openPrsCount > 0 ? `<span class="badge badge-healthy" title="Open PRs">🟢 ${u.openPrsCount}</span>` : ''}
+                      ${u.closedPrsCount > 0 ? `<span class="badge badge-closed" title="Closed PRs">⚪ ${u.closedPrsCount}</span>` : ''}
+                    </td>
+                    <!-- All-Time Branches column -->
+                    <td class="col-scope-all" style="text-align: center;">
+                      <span class="badge badge-tag" title="Total Branches">${u.allBranchesCount} Total</span>
+                      ${u.activeBranchesCount > 0 ? `<span class="badge badge-healthy" title="Active Branches">🟢 ${u.activeBranchesCount}</span>` : ''}
+                      ${u.staleBranchesCount > 0 ? `<span class="badge badge-warning" title="Stale Branches">🍂 ${u.staleBranchesCount}</span>` : ''}
+                    </td>
+                    <!-- Merge Rate column -->
+                    <td class="col-scope-all" style="text-align: center;">
+                      ${u.acceptanceRate !== null ? `<strong>${u.acceptanceRate}%</strong>` : '<span style="color: var(--text-muted)">—</span>'}
+                    </td>
+                    <!-- Attention Columns -->
+                    <td class="col-scope-attention" style="text-align: center;">${u.openPrsCount}</td>
+                    <td class="col-scope-attention" style="text-align: center;">
                       ${u.stalePrsCount > 0 ? `<span class="badge badge-warning">⏳ ${u.stalePrsCount}</span>` : '0'}
                     </td>
-                    <td style="text-align: center;">
+                    <td class="col-scope-attention" style="text-align: center;">
                       ${u.staleBranchesCount > 0 ? `<span class="badge badge-danger">🍂 ${u.staleBranchesCount}</span>` : '0'}
                     </td>
+                    <!-- Status / Review -->
                     <td style="text-align: center;">${statusBadge}</td>
                     <td style="text-align: center;">
                       <a href="#${userAnchor}">View breakdown →</a>
@@ -1077,85 +1295,182 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
           const userAvatar = u.username && u.username !== 'unknown' ? `https://github.com/${encodeURIComponent(u.username)}.png?size=64` : '';
           const userAnchor = `user-${escapeHtml(u.username.replace(/[^a-zA-Z0-9_-]/g, '-'))}`;
 
+          const allPrs = u.allPrs || u.openPrs || [];
+          const openPrs = u.openPrs || [];
+          const mergedPrs = u.mergedPrs || [];
+          const closedPrs = u.closedPrs || [];
+
+          const allBranches = u.allBranches || u.staleBranches || [];
+          const activeBranches = u.activeBranches || [];
+          const staleBranches = u.staleBranches || [];
+
+          const allPrsCount = u.allPrsCount ?? allPrs.length;
+          const mergedPrsCount = u.mergedPrsCount ?? mergedPrs.length;
+          const openPrsCount = u.openPrsCount ?? openPrs.length;
+          const closedPrsCount = u.closedPrsCount ?? closedPrs.length;
+
+          const allBranchesCount = u.allBranchesCount ?? allBranches.length;
+          const activeBranchesCount = u.activeBranchesCount ?? activeBranches.length;
+          const staleBranchesCount = u.staleBranchesCount ?? staleBranches.length;
+
           return `
-            <div class="detail-card" id="${userAnchor}">
+            <div class="detail-card contributor-card ${u.totalNeedsAttention === 0 ? 'card-scope-all-only' : ''}" id="${userAnchor}" data-username="${escapeHtml(u.username.toLowerCase())}">
               <div class="detail-card-header">
                 <div class="card-title">
                   <div class="user-flex">
-                    ${userAvatar ? `<img src="${userAvatar}" class="user-avatar" style="width: 34px; height: 34px;" alt="" onerror="this.style.display='none'">` : ''}
-                    <a href="https://github.com/${escapeHtml(u.username)}" target="_blank" rel="noopener noreferrer">${escapeHtml(u.username)}</a>
+                    ${userAvatar ? `<img src="${userAvatar}" class="user-avatar" style="width: 36px; height: 36px;" alt="" onerror="this.style.display='none'">` : ''}
+                    <div>
+                      <a href="https://github.com/${escapeHtml(u.username)}" target="_blank" rel="noopener noreferrer">${escapeHtml(u.username)}</a>
+                      <div style="font-size: 12px; font-weight: normal; color: var(--text-muted); margin-top: 2px;">
+                        ${u.repositories.map((repo) => `<span class="badge badge-tag">${escapeHtml(repo)}</span>`).join('')}
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div>
-                  ${u.repositories.map((repo) => `<span class="badge badge-tag">${escapeHtml(repo)}</span>`).join('')}
                   ${u.totalNeedsAttention > 0 ? `<span class="badge badge-warning">⚠️ ${u.totalNeedsAttention} items to review</span>` : `<span class="badge badge-healthy">✔ Active & Healthy</span>`}
                 </div>
               </div>
 
-              <!-- User's Open PRs -->
+              <!-- Contributor All-Time Summary Bar -->
+              <div class="user-all-time-summary" style="padding: 12px 20px; background: var(--table-hover); border-bottom: 1px solid var(--border);">
+                <div class="summary-pill">
+                  <span style="color: var(--text-muted)">All-Time PRs:</span>
+                  <strong>${allPrsCount}</strong>
+                  <span class="sub-stat">(${mergedPrsCount} merged, ${openPrsCount} open, ${closedPrsCount} closed)</span>
+                </div>
+                <div class="summary-pill">
+                  <span style="color: var(--text-muted)">All-Time Branches:</span>
+                  <strong>${allBranchesCount}</strong>
+                  <span class="sub-stat">(${activeBranchesCount} active, ${staleBranchesCount} stale)</span>
+                </div>
+                ${u.acceptanceRate !== null && u.acceptanceRate !== undefined ? `
+                  <div class="summary-pill">
+                    <span style="color: var(--text-muted)">Acceptance Rate:</span>
+                    <strong style="color: var(--success);">${u.acceptanceRate}%</strong>
+                  </div>
+                ` : ''}
+                ${u.firstActivityDate ? `
+                  <div class="summary-pill">
+                    <span style="color: var(--text-muted)">First Activity:</span>
+                    <strong>${formatDisplayDate(u.firstActivityDate)}</strong>
+                  </div>
+                ` : ''}
+                ${u.lastActivityDate ? `
+                  <div class="summary-pill">
+                    <span style="color: var(--text-muted)">Latest Activity:</span>
+                    <strong>${formatDisplayDate(u.lastActivityDate)}</strong>
+                  </div>
+                ` : ''}
+              </div>
+
+              <!-- User's Pull Requests (All Times with Filter Tabs) -->
               <div class="sub-section">
-                <div class="sub-title">🔀 Open Pull Requests (${u.openPrs.length})</div>
-                ${u.openPrs.length === 0 ? `
-                  <div class="empty-state">No open PRs authored by ${escapeHtml(u.username)}.</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+                  <div class="sub-title" style="margin-bottom: 0;">
+                    🔀 Pull Requests (${allPrs.length})
+                  </div>
+                  <div class="card-filter-tabs" id="prTabs_${userAnchor}">
+                    <button type="button" class="card-tab-btn active" onclick="filterUserPrs('${userAnchor}', 'all')">All (${allPrs.length})</button>
+                    <button type="button" class="card-tab-btn" onclick="filterUserPrs('${userAnchor}', 'OPEN')">Open (${openPrs.length})</button>
+                    <button type="button" class="card-tab-btn" onclick="filterUserPrs('${userAnchor}', 'MERGED')">Merged (${mergedPrs.length})</button>
+                    <button type="button" class="card-tab-btn" onclick="filterUserPrs('${userAnchor}', 'CLOSED')">Closed (${closedPrs.length})</button>
+                  </div>
+                </div>
+
+                ${allPrs.length === 0 ? `
+                  <div class="empty-state">No pull requests authored by ${escapeHtml(u.username)}.</div>
                 ` : `
                   <div style="overflow-x: auto;">
-                    <table aria-label="Open PRs for ${escapeHtml(u.username)}">
+                    <table aria-label="Pull Requests for ${escapeHtml(u.username)}" id="prTable_${userAnchor}">
                       <thead>
                         <tr>
                           <th scope="col">Repository</th>
                           <th scope="col">PR</th>
                           <th scope="col">Title</th>
-                          <th scope="col" style="text-align: center;">Age</th>
-                          <th scope="col" style="text-align: center;">Last Active</th>
                           <th scope="col" style="text-align: center;">Status</th>
+                          <th scope="col" style="text-align: center;">Created</th>
+                          <th scope="col" style="text-align: center;">Closed / Merged</th>
+                          <th scope="col" style="text-align: center;">Age / Inactivity</th>
                         </tr>
                       </thead>
                       <tbody>
-                        ${u.openPrs.map((pr) => `
-                          <tr>
-                            <td><span class="badge badge-tag">${escapeHtml(pr.repo)}</span></td>
-                            <td><a href="${escapeHtml(pr.url)}" target="_blank" rel="noopener noreferrer"><strong>#${pr.number}</strong></a></td>
-                            <td><a href="${escapeHtml(pr.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(pr.title)}</a></td>
-                            <td style="text-align: center;">${pr.ageDays}d</td>
-                            <td style="text-align: center;">
-                              ${pr.isStalePr ? `<span class="badge badge-warning">⏳ ${pr.daysSinceLastUpdate}d ago</span>` : `${pr.daysSinceLastUpdate}d ago`}
-                            </td>
-                            <td style="text-align: center;">
-                              ${pr.isDraft ? '<span class="badge badge-draft">Draft</span>' : '<span class="badge badge-healthy">✔ Ready</span>'}
-                            </td>
-                          </tr>
-                        `).join('')}
+                        ${allPrs.map((pr) => {
+                          let stateBadge = '<span class="badge badge-healthy">🟢 Open</span>';
+                          if (pr.state === 'MERGED') {
+                            stateBadge = '<span class="badge badge-merged">🟣 Merged</span>';
+                          } else if (pr.state === 'CLOSED') {
+                            stateBadge = '<span class="badge badge-closed">⚪ Closed</span>';
+                          }
+                          if (pr.isDraft) {
+                            stateBadge += ' <span class="badge badge-draft">Draft</span>';
+                          }
+
+                          return `
+                            <tr class="user-pr-row" data-state="${pr.state}">
+                              <td><span class="badge badge-tag">${escapeHtml(pr.repo)}</span></td>
+                              <td><a href="${escapeHtml(pr.url)}" target="_blank" rel="noopener noreferrer"><strong>#${pr.number}</strong></a></td>
+                              <td><a href="${escapeHtml(pr.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(pr.title)}</a></td>
+                              <td style="text-align: center;">${stateBadge}</td>
+                              <td style="text-align: center;">${formatDisplayDate(pr.createdAt)}</td>
+                              <td style="text-align: center;">${pr.mergedAt ? formatDisplayDate(pr.mergedAt) : (pr.closedAt ? formatDisplayDate(pr.closedAt) : '—')}</td>
+                              <td style="text-align: center;">
+                                ${pr.state === 'OPEN' && pr.isStalePr ? `<span class="badge badge-warning">⏳ ${pr.daysSinceLastUpdate}d inactive</span>` : `${pr.ageDays}d old`}
+                              </td>
+                            </tr>
+                          `;
+                        }).join('')}
                       </tbody>
                     </table>
                   </div>
                 `}
               </div>
 
-              <!-- User's Stale Branches -->
+              <!-- User's Branches (All Times with Filter Tabs) -->
               <div class="sub-section" style="border-top: 1px solid var(--border);">
-                <div class="sub-title">🍂 Stale Branches (${u.staleBranches.length})</div>
-                ${u.staleBranches.length === 0 ? `
-                  <div class="empty-state">No stale branches authored by ${escapeHtml(u.username)}.</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+                  <div class="sub-title" style="margin-bottom: 0;">
+                    🍂 Branches (${allBranches.length})
+                  </div>
+                  <div class="card-filter-tabs" id="branchTabs_${userAnchor}">
+                    <button type="button" class="card-tab-btn active" onclick="filterUserBranches('${userAnchor}', 'all')">All (${allBranches.length})</button>
+                    <button type="button" class="card-tab-btn" onclick="filterUserBranches('${userAnchor}', 'active')">Active (${activeBranches.length})</button>
+                    <button type="button" class="card-tab-btn" onclick="filterUserBranches('${userAnchor}', 'stale')">Stale (${staleBranches.length})</button>
+                  </div>
+                </div>
+
+                ${allBranches.length === 0 ? `
+                  <div class="empty-state">No branches authored by ${escapeHtml(u.username)}.</div>
                 ` : `
                   <div style="overflow-x: auto;">
-                    <table aria-label="Stale Branches for ${escapeHtml(u.username)}">
+                    <table aria-label="Branches for ${escapeHtml(u.username)}" id="branchTable_${userAnchor}">
                       <thead>
                         <tr>
                           <th scope="col">Repository</th>
                           <th scope="col">Branch</th>
+                          <th scope="col" style="text-align: center;">Status</th>
+                          <th scope="col" style="text-align: center;">Last Commit</th>
                           <th scope="col" style="text-align: center;">Inactive Days</th>
                           <th scope="col" style="text-align: center;">Has Open PR?</th>
                         </tr>
                       </thead>
                       <tbody>
-                        ${u.staleBranches.map((b) => {
+                        ${allBranches.map((b) => {
                           const branchUrl = `https://github.com/${escapeHtml(b.repo)}/tree/${encodeURIComponent(b.name)}`;
-                          const badgeColor = b.isVeryStale ? 'badge-danger' : 'badge-warning';
+                          let statusBadge = '<span class="badge badge-healthy">🟢 Active</span>';
+                          if (b.isVeryStale) {
+                            statusBadge = '<span class="badge badge-danger">🛑 Very Stale</span>';
+                          } else if (b.isStale) {
+                            statusBadge = '<span class="badge badge-warning">🍂 Stale</span>';
+                          }
+
                           return `
-                            <tr>
+                            <tr class="user-branch-row" data-status="${b.isStale ? 'stale' : 'active'}">
                               <td><span class="badge badge-tag">${escapeHtml(b.repo)}</span></td>
                               <td><a href="${branchUrl}" target="_blank" rel="noopener noreferrer"><code>${escapeHtml(b.name)}</code></a></td>
-                              <td style="text-align: center;"><span class="badge ${badgeColor}">${b.daysInactive} days</span></td>
+                              <td style="text-align: center;">${statusBadge}</td>
+                              <td style="text-align: center;">${b.lastCommitDate ? formatDisplayDate(b.lastCommitDate) : '—'}</td>
+                              <td style="text-align: center;">${b.daysInactive !== null ? `${b.daysInactive}d` : 'Active'}</td>
                               <td style="text-align: center;">
                                 ${b.hasOpenPr ? '<span class="badge badge-healthy">✔ Yes</span>' : '<span style="color: var(--text-muted)">No</span>'}
                               </td>
@@ -1295,12 +1610,13 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       const repos = DASHBOARD_DATA.results || [];
       const users = DASHBOARD_DATA.userActivities || [];
 
-      // 1. Search PRs
+      // 1. Search PRs across all states
       const matchedPrs = [];
       repos.forEach(repo => {
-        (repo.pullRequests || []).forEach(pr => {
+        const prsList = repo.allPullRequests || repo.pullRequests || [];
+        prsList.forEach(pr => {
           if (
-            pr.title.toLowerCase().includes(q) ||
+            (pr.title && pr.title.toLowerCase().includes(q)) ||
             String(pr.number).includes(q) ||
             (pr.author && pr.author.toLowerCase().includes(q)) ||
             repo.fullName.toLowerCase().includes(q)
@@ -1315,7 +1631,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       repos.forEach(repo => {
         (repo.branches || []).forEach(b => {
           if (
-            b.name.toLowerCase().includes(q) ||
+            (b.name && b.name.toLowerCase().includes(q)) ||
             (b.author && b.author.toLowerCase().includes(q)) ||
             repo.fullName.toLowerCase().includes(q)
           ) {
@@ -1389,20 +1705,30 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
         html += '</tbody></table></div></div>';
       }
 
-      // Pull Requests Section
+      // Pull Requests Section (Includes open, merged, closed)
       if ((showAll || currentSearchCategory === 'prs') && matchedPrs.length > 0) {
         html += '<div style="margin-bottom: 24px;">';
         html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: var(--header-text);">🔀 Matching Pull Requests (' + matchedPrs.length + ')</h3>';
-        html += '<div style="overflow-x: auto;"><table><thead><tr><th scope="col">Repository</th><th scope="col">PR</th><th scope="col">Title</th><th scope="col">Author</th><th scope="col" style="text-align: center;">Age</th><th scope="col" style="text-align: center;">Last Active</th><th scope="col" style="text-align: center;">Status</th></tr></thead><tbody>';
+        html += '<div style="overflow-x: auto;"><table><thead><tr><th scope="col">Repository</th><th scope="col">PR</th><th scope="col">Title</th><th scope="col">Author</th><th scope="col" style="text-align: center;">Status</th><th scope="col" style="text-align: center;">Age</th><th scope="col" style="text-align: center;">Activity</th></tr></thead><tbody>';
         matchedPrs.forEach(pr => {
+          let stateBadge = '<span class="badge badge-healthy">🟢 Open</span>';
+          if (pr.state === 'MERGED') {
+            stateBadge = '<span class="badge badge-merged">🟣 Merged</span>';
+          } else if (pr.state === 'CLOSED') {
+            stateBadge = '<span class="badge badge-closed">⚪ Closed</span>';
+          }
+          if (pr.isDraft) {
+            stateBadge += ' <span class="badge badge-draft">Draft</span>';
+          }
+
           html += '<tr>';
           html += '<td><span class="badge badge-tag">' + highlight(pr.repoFullName, q) + '</span></td>';
           html += '<td><a href="' + escapeHtml(pr.url) + '" target="_blank"><strong>#' + highlight(pr.number, q) + '</strong></a></td>';
           html += '<td><a href="' + escapeHtml(pr.url) + '" target="_blank">' + highlight(pr.title, q) + '</a></td>';
           html += '<td>' + highlight(pr.author, q) + '</td>';
+          html += '<td style="text-align: center;">' + stateBadge + '</td>';
           html += '<td style="text-align: center;">' + pr.ageDays + 'd</td>';
-          html += '<td style="text-align: center;">' + (pr.isStalePr ? '<span class="badge badge-warning">⏳ ' + pr.daysSinceLastUpdate + 'd ago</span>' : pr.daysSinceLastUpdate + 'd ago') + '</td>';
-          html += '<td style="text-align: center;">' + (pr.isDraft ? '<span class="badge badge-draft">Draft</span>' : '<span class="badge badge-healthy">✔ Ready</span>') + '</td>';
+          html += '<td style="text-align: center;">' + (pr.isStalePr ? '<span class="badge badge-warning">⏳ ' + pr.daysSinceLastUpdate + 'd inactive</span>' : pr.daysSinceLastUpdate + 'd ago') + '</td>';
           html += '</tr>';
         });
         html += '</tbody></table></div></div>';
@@ -1431,15 +1757,14 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       if ((showAll || currentSearchCategory === 'users') && matchedUsers.length > 0) {
         html += '<div style="margin-bottom: 24px;">';
         html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: var(--header-text);">👤 Matching Contributors (' + matchedUsers.length + ')</h3>';
-        html += '<div style="overflow-x: auto;"><table><thead><tr><th scope="col">Contributor</th><th scope="col">Repositories</th><th scope="col" style="text-align: center;">Open PRs</th><th scope="col" style="text-align: center;">Inactive PRs</th><th scope="col" style="text-align: center;">Stale Branches</th><th scope="col" style="text-align: center;">Items to Review</th></tr></thead><tbody>';
+        html += '<div style="overflow-x: auto;"><table><thead><tr><th scope="col">Contributor</th><th scope="col">Repositories</th><th scope="col" style="text-align: center;">All-Time PRs</th><th scope="col" style="text-align: center;">All-Time Branches</th><th scope="col" style="text-align: center;">Items to Review</th></tr></thead><tbody>';
         matchedUsers.forEach(u => {
           const userAvatar = u.username && u.username !== 'unknown' ? 'https://github.com/' + encodeURIComponent(u.username) + '.png?size=40' : '';
           html += '<tr>';
           html += '<td><div class="user-flex">' + (userAvatar ? '<img src="' + userAvatar + '" class="user-avatar" alt="" onerror="this.style.display=\\'none\\'"> ' : '') + '<strong><a href="https://github.com/' + escapeHtml(u.username) + '" target="_blank">' + highlight(u.username, q) + '</a></strong></div></td>';
           html += '<td>' + u.repositories.map(repo => '<span class="badge badge-tag">' + highlight(repo, q) + '</span>').join('') + '</td>';
-          html += '<td style="text-align: center;">' + u.openPrsCount + '</td>';
-          html += '<td style="text-align: center;">' + (u.stalePrsCount > 0 ? '<span class="badge badge-warning">⏳ ' + u.stalePrsCount + '</span>' : '0') + '</td>';
-          html += '<td style="text-align: center;">' + (u.staleBranchesCount > 0 ? '<span class="badge badge-danger">🍂 ' + u.staleBranchesCount + '</span>' : '0') + '</td>';
+          html += '<td style="text-align: center;"><span class="badge badge-tag">' + u.allPrsCount + ' Total</span> ' + (u.mergedPrsCount > 0 ? '<span class="badge badge-merged">🟣 ' + u.mergedPrsCount + '</span>' : '') + '</td>';
+          html += '<td style="text-align: center;"><span class="badge badge-tag">' + u.allBranchesCount + ' Total</span></td>';
           html += '<td style="text-align: center;">' + (u.totalNeedsAttention > 0 ? '<span class="badge badge-warning">⚠️ ' + u.totalNeedsAttention + ' items</span>' : '<span class="badge badge-healthy">✔ All Good</span>') + '</td>';
           html += '</tr>';
         });
@@ -1452,6 +1777,111 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
 
       container.innerHTML = html;
     }
+
+    // Contributor Activity Scope Switcher (All Times vs Needs Attention)
+    function setContributorScope(scope) {
+      const viewUsers = document.getElementById('viewUsers');
+      const btnAllTime = document.getElementById('btnScopeAllTime');
+      const btnAttention = document.getElementById('btnScopeAttention');
+      const hint = document.getElementById('scopeHint');
+
+      if (!viewUsers || !btnAllTime || !btnAttention) return;
+
+      if (scope === 'attention') {
+        viewUsers.classList.remove('scope-all-time');
+        viewUsers.classList.add('scope-attention');
+        btnAllTime.classList.remove('active');
+        btnAttention.classList.add('active');
+        btnAllTime.setAttribute('aria-checked', 'false');
+        btnAttention.setAttribute('aria-checked', 'true');
+        if (hint) hint.textContent = 'Showing items needing attention: open pull requests and stale branches.';
+      } else {
+        viewUsers.classList.remove('scope-attention');
+        viewUsers.classList.add('scope-all-time');
+        btnAttention.classList.remove('active');
+        btnAllTime.classList.add('active');
+        btnAttention.setAttribute('aria-checked', 'false');
+        btnAllTime.setAttribute('aria-checked', 'true');
+        if (hint) hint.textContent = 'Showing full contributor history: merged, open, and closed PRs plus all branches.';
+      }
+
+      try {
+        localStorage.setItem('fluffy_contributor_scope', scope);
+      } catch (e) {}
+      console.log('[Dashboard:ContributorScope] Switched scope to:', scope);
+    }
+
+    // Filter PRs inside a specific User Card
+    function filterUserPrs(userAnchor, state) {
+      const table = document.getElementById('prTable_' + userAnchor);
+      const tabs = document.getElementById('prTabs_' + userAnchor);
+      if (!table) return;
+
+      if (tabs) {
+        tabs.querySelectorAll('.card-tab-btn').forEach(btn => {
+          const isMatch = (state === 'all' && btn.textContent.startsWith('All')) ||
+                          (state === 'OPEN' && btn.textContent.startsWith('Open')) ||
+                          (state === 'MERGED' && btn.textContent.startsWith('Merged')) ||
+                          (state === 'CLOSED' && btn.textContent.startsWith('Closed'));
+          btn.classList.toggle('active', isMatch);
+        });
+      }
+
+      table.querySelectorAll('tbody tr.user-pr-row').forEach(row => {
+        if (state === 'all' || row.getAttribute('data-state') === state) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+    }
+
+    // Filter Branches inside a specific User Card
+    function filterUserBranches(userAnchor, status) {
+      const table = document.getElementById('branchTable_' + userAnchor);
+      const tabs = document.getElementById('branchTabs_' + userAnchor);
+      if (!table) return;
+
+      if (tabs) {
+        tabs.querySelectorAll('.card-tab-btn').forEach(btn => {
+          const isMatch = (status === 'all' && btn.textContent.startsWith('All')) ||
+                          (status === 'active' && btn.textContent.startsWith('Active')) ||
+                          (status === 'stale' && btn.textContent.startsWith('Stale'));
+          btn.classList.toggle('active', isMatch);
+        });
+      }
+
+      table.querySelectorAll('tbody tr.user-branch-row').forEach(row => {
+        if (status === 'all' || row.getAttribute('data-status') === status) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+    }
+
+    // Live search/filter specifically within Contributor Activities view
+    function filterContributorList(query) {
+      const q = query.toLowerCase().trim();
+      document.querySelectorAll('.contributor-row').forEach(row => {
+        const username = row.getAttribute('data-username') || '';
+        row.style.display = (!q || username.includes(q)) ? '' : 'none';
+      });
+      document.querySelectorAll('.contributor-card').forEach(card => {
+        const username = card.getAttribute('data-username') || '';
+        card.style.display = (!q || username.includes(q)) ? '' : 'none';
+      });
+    }
+
+    // Initialize Contributor Scope from localStorage
+    (function initContributorScope() {
+      try {
+        const saved = localStorage.getItem('fluffy_contributor_scope');
+        if (saved) {
+          setContributorScope(saved);
+        }
+      } catch (e) {}
+    })();
 
     console.log('[Dashboard] Loaded with', DASHBOARD_DATA.results.length, 'repositories and', DASHBOARD_DATA.userActivities.length, 'contributors.');
 

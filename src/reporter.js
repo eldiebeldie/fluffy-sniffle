@@ -122,32 +122,66 @@ export function printDetailedRepo(res) {
 /**
  * Print overview table across all contributors
  */
-export function printUserOverviewTable(userActivities) {
+export function printUserOverviewTable(userActivities, options = {}) {
   if (!userActivities || userActivities.length === 0) return;
 
-  console.log('\n' + chalk.bold.cyan('👤 Contributor Activities Overview'));
+  const showAllTime = Boolean(options.allTime);
+  console.log('\n' + chalk.bold.cyan(`👤 Contributor Activities Overview (${showAllTime ? 'All-Time Records' : 'Attention & Activity'})`));
 
-  const table = new Table({
-    head: [
-      chalk.white.bold('Contributor'),
-      chalk.white.bold('Repos'),
-      chalk.white.bold('Open PRs'),
-      chalk.white.bold('Stale PRs'),
-      chalk.white.bold('Stale Branches'),
-      chalk.white.bold('Items to Review'),
-    ],
-    colAligns: ['left', 'center', 'center', 'center', 'center', 'center'],
-  });
+  const head = showAllTime
+    ? [
+        chalk.white.bold('Contributor'),
+        chalk.white.bold('Repos'),
+        chalk.white.bold('All PRs'),
+        chalk.white.bold('Merged'),
+        chalk.white.bold('Open'),
+        chalk.white.bold('Branches'),
+        chalk.white.bold('Active'),
+        chalk.white.bold('Stale'),
+        chalk.white.bold('Merge Rate'),
+        chalk.white.bold('To Review'),
+      ]
+    : [
+        chalk.white.bold('Contributor'),
+        chalk.white.bold('Repos'),
+        chalk.white.bold('All PRs'),
+        chalk.white.bold('Open PRs'),
+        chalk.white.bold('Stale PRs'),
+        chalk.white.bold('Stale Branches'),
+        chalk.white.bold('Items to Review'),
+      ];
+
+  const colAligns = showAllTime
+    ? ['left', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center', 'center']
+    : ['left', 'center', 'center', 'center', 'center', 'center', 'center'];
+
+  const table = new Table({ head, colAligns });
 
   userActivities.slice(0, 20).forEach((u) => {
-    table.push([
-      chalk.bold(u.username),
-      u.repositories.length,
-      u.openPrsCount,
-      u.stalePrsCount > 0 ? chalk.yellow(u.stalePrsCount) : chalk.green('0'),
-      u.staleBranchesCount > 0 ? chalk.red(u.staleBranchesCount) : chalk.green('0'),
-      u.totalNeedsAttention > 0 ? chalk.yellow.bold(u.totalNeedsAttention) : chalk.green('0'),
-    ]);
+    if (showAllTime) {
+      table.push([
+        chalk.bold(u.username),
+        u.repositories.length,
+        chalk.cyan(u.allPrsCount),
+        chalk.magenta(u.mergedPrsCount),
+        chalk.green(u.openPrsCount),
+        u.allBranchesCount,
+        chalk.green(u.activeBranchesCount),
+        u.staleBranchesCount > 0 ? chalk.red(u.staleBranchesCount) : chalk.gray('0'),
+        u.acceptanceRate !== null ? `${u.acceptanceRate}%` : chalk.gray('—'),
+        u.totalNeedsAttention > 0 ? chalk.yellow.bold(u.totalNeedsAttention) : chalk.green('0'),
+      ]);
+    } else {
+      table.push([
+        chalk.bold(u.username),
+        u.repositories.length,
+        chalk.cyan(u.allPrsCount),
+        u.openPrsCount,
+        u.stalePrsCount > 0 ? chalk.yellow(u.stalePrsCount) : chalk.green('0'),
+        u.staleBranchesCount > 0 ? chalk.red(u.staleBranchesCount) : chalk.green('0'),
+        u.totalNeedsAttention > 0 ? chalk.yellow.bold(u.totalNeedsAttention) : chalk.green('0'),
+      ]);
+    }
   });
 
   console.log(table.toString());
@@ -181,11 +215,11 @@ export function saveMarkdownReport(results, userActivities = [], outputDir = 're
 
   // Contributor Activities Table
   if (userActivities && userActivities.length > 0) {
-    md += `## 👤 Contributor Activities Overview\n\n`;
-    md += `| Contributor | Repositories | Open PRs | Stale PRs | Stale Branches | Items to Review |\n`;
-    md += `| :--- | :---: | :---: | :---: | :---: | :---: |\n`;
+    md += `## 👤 Contributor Activities Overview (All-Time & Attention)\n\n`;
+    md += `| Contributor | Repositories | All PRs | Merged | Open | Branches | Stale Branches | Items to Review |\n`;
+    md += `| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n`;
     userActivities.forEach((u) => {
-      md += `| [${u.username}](https://github.com/${u.username}) | ${u.repositories.join(', ')} | ${u.openPrsCount} | ${u.stalePrsCount} | ${u.staleBranchesCount} | ${u.totalNeedsAttention} |\n`;
+      md += `| [${u.username}](https://github.com/${u.username}) | ${u.repositories.join(', ')} | ${u.allPrsCount} | ${u.mergedPrsCount} | ${u.openPrsCount} | ${u.allBranchesCount} | ${u.staleBranchesCount} | ${u.totalNeedsAttention} |\n`;
     });
     md += `\n---\n\n`;
   }

@@ -150,7 +150,11 @@ stateDiagram-v2
 
 - **⚡ Blazing Multi-Repository Audits:** Monitor dozens of repositories simultaneously without touching Git locally.
 - **🏢 Repository Health View:** Inspect default branches, private/public status, and categorized branch lists with staleness counters.
-- **👤 Contributor Activities Leaderboard:** Cross-project activity aggregation showing who authors open PRs, which developers own stale branches, and who has pending reviews.
+- **👤 Contributor Activities & All-Time Details:**
+  - **All-Time Scope Option:** Toggle between `🌐 All Times (Complete History)` and `⚠️ Needs Attention Only` with instant switching and persistence in `localStorage`.
+  - **All-Time Pull Requests & Branches:** View complete contributor work including merged PRs, closed PRs, active branches, stale branches, and acceptance merge rates.
+  - **In-Card Interactive Filter Tabs:** Filter PRs (`All`, `Open`, `Merged`, `Closed`) and branches (`All`, `Active`, `Stale`) directly inside each contributor card.
+  - **CLI Support:** Run `npm run cli -- --all-time` for colorized terminal tables with complete contributor lifespans and metrics.
 - **🔍 Global Instant Search Engine:**
   - Full-text search across PR titles, PR numbers, branch names, commit authors, and repository names.
   - Category filter chips: `All`, `Pull Requests`, `Branches`, `Contributors`, `Repositories`.
