@@ -1,0 +1,11 @@
+{
+  "defaultStaleDays": 30,
+  "warnStaleDays": 60,
+  "repositories": [
+    {
+      "owner": "expressjs",
+      "repo": "express"
+    }
+  ]
+}
+

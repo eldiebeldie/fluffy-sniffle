@@ -1,0 +1,194 @@
+import { Octokit } from '@octokit/rest';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const token = process.env.GITHUB_TOKEN;
+
+export const octokit = new Octokit({
+  auth: token || undefined,
+});
+
+export const hasToken = Boolean(token);
+
+/**
+ * Fetch branches and PRs using GraphQL (requires GITHUB_TOKEN)
+ */
+async function fetchViaGraphQL(owner, repo) {
+  const query = `
+    query GetRepoHealth($owner: String!, $repo: String!) {
+      repository(owner: $owner, name: $repo) {
+        name
+        owner {
+          login
+        }
+        isPrivate
+        defaultBranchRef {
+          name
+        }
+        refs(refPrefix: "refs/heads/", first: 100) {
+          totalCount
+          nodes {
+            name
+            target {
+              ... on Commit {
+                oid
+                committedDate
+                pushedDate
+                author {
+                  name
+                  user {
+                    login
+                  }
+                }
+              }
+            }
+          }
+        }
+        pullRequests(states: OPEN, first: 100, orderBy: { field: CREATED_AT, direction: DESC }) {
+          totalCount
+          nodes {
+            number
+            title
+            url
+            isDraft
+            createdAt
+            updatedAt
+            headRefName
+            author {
+              login
+            }
+            comments {
+              totalCount
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const response = await octokit.graphql(query, { owner, repo });
+  const repoData = response.repository;
+
+  if (!repoData) {
+    throw new Error(`Repository ${owner}/${repo} not found.`);
+  }
+
+  const defaultBranch = repoData.defaultBranchRef?.name || 'main';
+
+  const branches = (repoData.refs?.nodes || []).map((branch) => {
+    const commit = branch.target;
+    return {
+      name: branch.name,
+      lastCommitDate: commit?.committedDate ? new Date(commit.committedDate) : null,
+      lastCommitSha: commit?.oid,
+      author: commit?.author?.user?.login || commit?.author?.name || 'unknown',
+    };
+  });
+
+  const pullRequests = (repoData.pullRequests?.nodes || []).map((pr) => ({
+    number: pr.number,
+    title: pr.title,
+    url: pr.url,
+    isDraft: pr.isDraft,
+    createdAt: new Date(pr.createdAt),
+    updatedAt: new Date(pr.updatedAt),
+    headRefName: pr.headRefName,
+    author: pr.author?.login || 'unknown',
+    commentsCount: pr.comments?.totalCount || 0,
+  }));
+
+  return {
+    fullName: `${owner}/${repo}`,
+    defaultBranch,
+    isPrivate: repoData.isPrivate,
+    totalBranchesCount: repoData.refs?.totalCount || branches.length,
+    totalOpenPrsCount: repoData.pullRequests?.totalCount || pullRequests.length,
+    branches,
+    pullRequests,
+  };
+}
+
+/**
+ * Fallback: Fetch branches and PRs using REST API (works unauthenticated for public repos)
+ */
+async function fetchViaRest(owner, repo) {
+  // 1. Get repository metadata
+  const { data: repoData } = await octokit.rest.repos.get({ owner, repo });
+  const defaultBranch = repoData.default_branch;
+
+  // 2. Fetch open PRs
+  const { data: prsData } = await octokit.rest.pulls.list({
+    owner,
+    repo,
+    state: 'open',
+    per_page: 100,
+  });
+
+  const pullRequests = prsData.map((pr) => ({
+    number: pr.number,
+    title: pr.title,
+    url: pr.html_url,
+    isDraft: pr.draft || false,
+    createdAt: new Date(pr.created_at),
+    updatedAt: new Date(pr.updated_at),
+    headRefName: pr.head.ref,
+    author: pr.user?.login || 'unknown',
+    commentsCount: pr.comments || 0,
+  }));
+
+  // 3. Fetch branches
+  const { data: branchesData } = await octokit.rest.repos.listBranches({
+    owner,
+    repo,
+    per_page: 100,
+  });
+
+  // Note: For REST, commit date requires commit details. Fetch in parallel for top branches:
+  const branches = await Promise.all(
+    branchesData.slice(0, 30).map(async (branch) => {
+      try {
+        const { data: commitData } = await octokit.rest.repos.getCommit({
+          owner,
+          repo,
+          ref: branch.commit.sha,
+        });
+        return {
+          name: branch.name,
+          lastCommitDate: new Date(commitData.commit.committer?.date || commitData.commit.author?.date),
+          lastCommitSha: branch.commit.sha,
+          author: commitData.author?.login || commitData.commit.author?.name || 'unknown',
+        };
+      } catch {
+        return {
+          name: branch.name,
+          lastCommitDate: null,
+          lastCommitSha: branch.commit.sha,
+          author: 'unknown',
+        };
+      }
+    })
+  );
+
+  return {
+    fullName: `${owner}/${repo}`,
+    defaultBranch,
+    isPrivate: repoData.private,
+    totalBranchesCount: branchesData.length,
+    totalOpenPrsCount: pullRequests.length,
+    branches,
+    pullRequests,
+  };
+}
+
+/**
+ * Main export to get repository data
+ */
+export async function getRepositoryHealthData(owner, repo) {
+  if (hasToken) {
+    return await fetchViaGraphQL(owner, repo);
+  } else {
+    return await fetchViaRest(owner, repo);
+  }
+}
+

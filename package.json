@@ -1,0 +1,28 @@
+{
+  "name": "fluffy-sniffle",
+  "version": "1.0.0",
+  "description": "GitHub repository health analyzer: checks stale branches, open PRs, and generates summaries across multiple repos.",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dashboard": "node src/index.js --open",
+    "report:html": "node src/index.js --html",
+    "report:markdown": "node src/index.js --markdown"
+  },
+  "keywords": [
+    "github",
+    "pull-requests",
+    "stale-branches",
+    "repository-health",
+    "octokit"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@octokit/rest": "^21.1.1",
+    "chalk": "^5.4.1",
+    "cli-table3": "^0.6.5",
+    "dotenv": "^16.4.7"
+  }
+}
