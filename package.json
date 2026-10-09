@@ -1,17 +1,15 @@
 {
   "name": "fluffy-sniffle",
   "version": "1.0.0",
-  "description": "GitHub repository health analyzer: checks stale branches, open PRs, and generates summaries across multiple repos.",
-  "main": "src/index.js",
-  "type": "module",
+  "description": "GitHub repository health analyzer: checks stale branches, open PRs, and generates summaries across multiple repos (.NET 10).",
   "scripts": {
-    "start": "node src/server.js --open",
-    "dev": "node --watch --watch-path=src --watch-path=config.json src/server.js --open --dev",
-    "dev:no-open": "node --watch --watch-path=src --watch-path=config.json src/server.js --dev",
-    "server": "node src/server.js",
-    "cli": "node src/index.js",
-    "report:html": "node src/index.js --html",
-    "report:markdown": "node src/index.js --markdown",
+    "start": "dotnet run -- --open",
+    "server": "dotnet run",
+    "dev": "dotnet watch run -- --dev",
+    "cli": "dotnet run -- cli",
+    "report:html": "dotnet run -- --html",
+    "report:markdown": "dotnet run -- --markdown",
+    "build": "dotnet build",
     "docker:build": "docker build -t fluffy-sniffle .",
     "docker:run": "docker run -d -p 3000:3000 --env-file .env -v ${PWD}/reports:/app/reports fluffy-sniffle"
   },
@@ -20,15 +18,9 @@
     "pull-requests",
     "stale-branches",
     "repository-health",
-    "octokit"
+    "dotnet",
+    "aspnetcore"
   ],
   "author": "EldieBeldie <eldargr@gmail.com>",
-  "license": "MIT",
-  "dependencies": {
-    "@octokit/rest": "^21.1.1",
-    "chalk": "^5.4.1",
-    "cli-table3": "^0.6.5",
-    "dotenv": "^16.4.7",
-    "express": "^5.3.0"
-  }
+  "license": "MIT"
 }

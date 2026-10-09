@@ -10,7 +10,8 @@ services:
       - "3000:3000"
     environment:
       - PORT=3000
-      - NODE_ENV=production
+      - ASPNETCORE_ENVIRONMENT=Production
+      - DOTNET_ENVIRONMENT=Production
       # GitHub Personal Access Token (loaded from .env if present)
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
     volumes:
@@ -18,4 +19,3 @@ services:
       - ./reports:/app/reports
       # Mount config.json so configuration changes reflect without rebuilding
       - ./config.json:/app/config.json
-

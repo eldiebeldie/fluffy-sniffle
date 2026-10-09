@@ -1,5 +1,17 @@
+# .NET Build outputs
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# Node artifacts (legacy)
 node_modules/
+package-lock.json
+
+# Environment and sensitive data
 .env
 *.log
-reports/
 
+# Generated reports & cache
+reports/
