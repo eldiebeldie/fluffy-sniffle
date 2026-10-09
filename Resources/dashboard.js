@@ -165,7 +165,7 @@
       document.getElementById('countSearchUsers').textContent = matchedUsers.length;
       document.getElementById('countSearchRepos').textContent = matchedRepos.length;
 
-      document.getElementById('searchSummaryTitle').innerHTML = 'ðŸ” Search Results for "' + escapeHtml(query) + '"';
+      document.getElementById('searchSummaryTitle').innerHTML = '🔍 Search Results for "' + escapeHtml(query) + '"';
       document.getElementById('searchSummarySubtitle').textContent = 'Found ' + totalMatches + ' matching items across all tracked repositories';
 
       console.log('[Dashboard:Search] Searched for: "' + query + '" -> Found ' + totalMatches + ' matches');
@@ -195,15 +195,15 @@
       // Repositories Section
       if ((showAll || currentSearchCategory === 'repos') && matchedRepos.length > 0) {
         html += '<div style="margin-bottom: 24px;">';
-        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: var(--header-text);">ðŸ¢ Matching Repositories (' + matchedRepos.length + ')</h3>';
+        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: var(--header-text);">🏢 Matching Repositories (' + matchedRepos.length + ')</h3>';
         html += '<div style="overflow-x: auto;"><table><thead><tr><th scope="col">Repository</th><th scope="col" style="text-align: center;">Branches</th><th scope="col" style="text-align: center;">Stale</th><th scope="col" style="text-align: center;">Open PRs</th><th scope="col" style="text-align: center;">Inactive PRs</th></tr></thead><tbody>';
         matchedRepos.forEach(r => {
           html += '<tr>';
           html += '<td><strong><a href="https://github.com/' + escapeHtml(r.fullName) + '" target="_blank">' + highlight(r.fullName, q) + '</a></strong></td>';
           html += '<td style="text-align: center;">' + r.totalBranches + '</td>';
-          html += '<td style="text-align: center;"><span class="badge badge-warning">ðŸ‚ ' + r.staleBranchesCount + '</span></td>';
+          html += '<td style="text-align: center;"><span class="badge badge-warning">🍂 ' + r.staleBranchesCount + '</span></td>';
           html += '<td style="text-align: center;">' + r.totalOpenPrs + '</td>';
-          html += '<td style="text-align: center;"><span class="badge badge-warning">â³ ' + r.stalePrsCount + '</span></td>';
+          html += '<td style="text-align: center;"><span class="badge badge-warning">⏳ ' + r.stalePrsCount + '</span></td>';
           html += '</tr>';
         });
         html += '</tbody></table></div></div>';
@@ -212,14 +212,14 @@
       // Pull Requests Section (Includes open, merged, closed)
       if ((showAll || currentSearchCategory === 'prs') && matchedPrs.length > 0) {
         html += '<div style="margin-bottom: 24px;">';
-        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: var(--header-text);">ðŸ”€ Matching Pull Requests (' + matchedPrs.length + ')</h3>';
+        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: var(--header-text);">🔀 Matching Pull Requests (' + matchedPrs.length + ')</h3>';
         html += '<div style="overflow-x: auto;"><table><thead><tr><th scope="col">Repository</th><th scope="col">PR</th><th scope="col">Title</th><th scope="col">Author</th><th scope="col" style="text-align: center;">Status</th><th scope="col" style="text-align: center;">Age</th><th scope="col" style="text-align: center;">Activity</th></tr></thead><tbody>';
         matchedPrs.forEach(pr => {
-          let stateBadge = '<span class="badge badge-healthy">ðŸŸ¢ Open</span>';
+          let stateBadge = '<span class="badge badge-healthy">🟢 Open</span>';
           if (pr.state === 'MERGED') {
-            stateBadge = '<span class="badge badge-merged">ðŸŸ£ Merged</span>';
+            stateBadge = '<span class="badge badge-merged">🟣 Merged</span>';
           } else if (pr.state === 'CLOSED') {
-            stateBadge = '<span class="badge badge-closed">âšª Closed</span>';
+            stateBadge = '<span class="badge badge-closed">⚪ Closed</span>';
           }
           if (pr.isDraft) {
             stateBadge += ' <span class="badge badge-draft">Draft</span>';
@@ -232,7 +232,7 @@
           html += '<td>' + highlight(pr.author, q) + '</td>';
           html += '<td style="text-align: center;">' + stateBadge + '</td>';
           html += '<td style="text-align: center;">' + pr.ageDays + 'd</td>';
-          html += '<td style="text-align: center;">' + (pr.isStalePr ? '<span class="badge badge-warning">â³ ' + pr.daysSinceLastUpdate + 'd inactive</span>' : pr.daysSinceLastUpdate + 'd ago') + '</td>';
+          html += '<td style="text-align: center;">' + (pr.isStalePr ? '<span class="badge badge-warning">⏳ ' + pr.daysSinceLastUpdate + 'd inactive</span>' : pr.daysSinceLastUpdate + 'd ago') + '</td>';
           html += '</tr>';
         });
         html += '</tbody></table></div></div>';
@@ -241,7 +241,7 @@
       // Branches Section
       if ((showAll || currentSearchCategory === 'branches') && matchedBranches.length > 0) {
         html += '<div style="margin-bottom: 24px;">';
-        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: var(--header-text);">ðŸ‚ Matching Branches (' + matchedBranches.length + ')</h3>';
+        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: var(--header-text);">🍂 Matching Branches (' + matchedBranches.length + ')</h3>';
         html += '<div style="overflow-x: auto;"><table><thead><tr><th scope="col">Repository</th><th scope="col">Branch</th><th scope="col" style="text-align: center;">Inactive Days</th><th scope="col">Last Author</th><th scope="col" style="text-align: center;">Open PR?</th></tr></thead><tbody>';
         matchedBranches.forEach(b => {
           const branchUrl = 'https://github.com/' + escapeHtml(b.repoFullName) + '/tree/' + encodeURIComponent(b.name);
@@ -251,7 +251,7 @@
           html += '<td><a href="' + branchUrl + '" target="_blank"><code>' + highlight(b.name, q) + '</code></a></td>';
           html += '<td style="text-align: center;"><span class="badge ' + badgeClass + '">' + (b.daysInactive !== null ? b.daysInactive + 'd' : 'Active') + '</span></td>';
           html += '<td>' + highlight(b.author, q) + '</td>';
-          html += '<td style="text-align: center;">' + (b.hasOpenPr ? '<span class="badge badge-healthy">âœ” Yes</span>' : '<span style="color: var(--text-muted)">No</span>') + '</td>';
+          html += '<td style="text-align: center;">' + (b.hasOpenPr ? '<span class="badge badge-healthy">✔ Yes</span>' : '<span style="color: var(--text-muted)">No</span>') + '</td>';
           html += '</tr>';
         });
         html += '</tbody></table></div></div>';
@@ -260,16 +260,16 @@
       // Contributors Section
       if ((showAll || currentSearchCategory === 'users') && matchedUsers.length > 0) {
         html += '<div style="margin-bottom: 24px;">';
-        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: var(--header-text);">ðŸ‘¤ Matching Contributors (' + matchedUsers.length + ')</h3>';
+        html += '<h3 style="font-size: 16px; margin-bottom: 12px; color: var(--header-text);">👤 Matching Contributors (' + matchedUsers.length + ')</h3>';
         html += '<div style="overflow-x: auto;"><table><thead><tr><th scope="col">Contributor</th><th scope="col">Repositories</th><th scope="col" style="text-align: center;">All-Time PRs</th><th scope="col" style="text-align: center;">All-Time Branches</th><th scope="col" style="text-align: center;">Items to Review</th></tr></thead><tbody>';
         matchedUsers.forEach(u => {
           const userAvatar = u.username && u.username !== 'unknown' ? 'https://github.com/' + encodeURIComponent(u.username) + '.png?size=40' : '';
           html += '<tr>';
-          html += '<td><div class="user-flex">' + (userAvatar ? '<img src="' + userAvatar + '" class="user-avatar" alt="" onerror="this.style.display=\\'none\\'"> ' : '') + '<strong><a href="https://github.com/' + escapeHtml(u.username) + '" target="_blank">' + highlight(u.username, q) + '</a></strong></div></td>';
+          html += '<td><div class="user-flex">' + (userAvatar ? '<img src="' + userAvatar + '" class="user-avatar" alt="" onerror="this.style.display=\'none\'"> ' : '') + '<strong><a href="https://github.com/' + escapeHtml(u.username) + '" target="_blank">' + highlight(u.username, q) + '</a></strong></div></td>';
           html += '<td>' + u.repositories.map(repo => '<span class="badge badge-tag">' + highlight(repo, q) + '</span>').join('') + '</td>';
-          html += '<td style="text-align: center;"><span class="badge badge-tag">' + u.allPrsCount + ' Total</span> ' + (u.mergedPrsCount > 0 ? '<span class="badge badge-merged">ðŸŸ£ ' + u.mergedPrsCount + '</span>' : '') + '</td>';
+          html += '<td style="text-align: center;"><span class="badge badge-tag">' + u.allPrsCount + ' Total</span> ' + (u.mergedPrsCount > 0 ? '<span class="badge badge-merged">🟣 ' + u.mergedPrsCount + '</span>' : '') + '</td>';
           html += '<td style="text-align: center;"><span class="badge badge-tag">' + u.allBranchesCount + ' Total</span></td>';
-          html += '<td style="text-align: center;">' + (u.totalNeedsAttention > 0 ? '<span class="badge badge-warning">âš ï¸ ' + u.totalNeedsAttention + ' items</span>' : '<span class="badge badge-healthy">âœ” All Good</span>') + '</td>';
+          html += '<td style="text-align: center;">' + (u.totalNeedsAttention > 0 ? '<span class="badge badge-warning">⚠️ ' + u.totalNeedsAttention + ' items</span>' : '<span class="badge badge-healthy">✔ All Good</span>') + '</td>';
           html += '</tr>';
         });
         html += '</tbody></table></div></div>';
@@ -463,14 +463,14 @@
         if (!res.ok || !data.success) {
           throw new Error(data.error || 'Scan failed');
         }
-        showToast('âœ” Scan complete in ' + durationMs + 'ms! Updating page...', 'success');
+        showToast('✔ Scan complete in ' + durationMs + 'ms! Updating page...', 'success');
         setTimeout(() => {
           window.location.reload();
         }, 600);
       } catch (err) {
         const durationMs = Math.round(performance.now() - reqStart);
         console.error('[Dashboard:API] Scan error after ' + durationMs + 'ms:', err);
-        showToast('âŒ Scan failed: ' + err.message, 'error');
+        showToast('❌ Scan failed: ' + err.message, 'error');
         btn.disabled = false;
         icon.classList.remove('spinning');
         text.textContent = 'Run Report Now';
@@ -500,12 +500,12 @@
         if (!res.ok || !data.success) {
           throw new Error(data.error || 'Failed to remove repository');
         }
-        showToast('âœ” Removed ' + fullName + ' in ' + durationMs + 'ms! Refreshing...', 'success');
+        showToast('✔ Removed ' + fullName + ' in ' + durationMs + 'ms! Refreshing...', 'success');
         setTimeout(() => window.location.reload(), 600);
       } catch (err) {
         const durationMs = Math.round(performance.now() - reqStart);
         console.error('[Dashboard:API] Remove repo error after ' + durationMs + 'ms:', err);
-        showToast('âŒ Failed: ' + err.message, 'error');
+        showToast('❌ Failed: ' + err.message, 'error');
       }
     }
 
@@ -544,13 +544,13 @@
         if (!res.ok || !data.success) {
           throw new Error(data.error || 'Failed to add repository');
         }
-        showToast('âœ” Repository verified & added in ' + durationMs + 'ms! Refreshing...', 'success');
+        showToast('✔ Repository verified & added in ' + durationMs + 'ms! Refreshing...', 'success');
         input.value = '';
         setTimeout(() => window.location.reload(), 600);
       } catch (err) {
         const durationMs = Math.round(performance.now() - reqStart);
         console.error('[Dashboard:API] Add repo error after ' + durationMs + 'ms:', err);
-        showToast('âŒ ' + err.message, 'error');
+        showToast('❌ ' + err.message, 'error');
       } finally {
         input.disabled = false;
         if (addBtn) addBtn.disabled = false;
