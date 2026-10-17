@@ -14,10 +14,12 @@ services:
       - PORT=3000
       - NODE_ENV=production
       - DASHBOARD_READONLY=${DASHBOARD_READONLY:-false}
+      - DASHBOARD_API_KEY=${DASHBOARD_API_KEY:-}
+      - DASHBOARD_REQUIRE_AUTH=${DASHBOARD_REQUIRE_AUTH:-false}
+      - ENABLE_DISK_CACHE=${ENABLE_DISK_CACHE:-false}
+      - ENABLE_DISK_REPORTS=${ENABLE_DISK_REPORTS:-false}
       # GitHub Personal Access Token (loaded from .env if present)
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
     volumes:
-      # Persist generated reports and cache on the host machine
-      - ./reports:/app/reports
       # Mount config.json so configuration changes reflect without rebuilding
       - ./config.json:/app/config.json

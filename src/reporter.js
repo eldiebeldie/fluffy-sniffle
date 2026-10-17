@@ -191,9 +191,22 @@ export function printUserOverviewTable(userActivities, options = {}) {
 }
 
 /**
- * Generate Markdown report file
+ * Generate Markdown report file (only when disk report persistence is enabled via environment variable)
  */
 export function saveMarkdownReport(results, userActivities = [], outputDir = 'reports') {
+  const diskReportsAllowed =
+    process.env.ENABLE_DISK_REPORTS === 'true' ||
+    process.env.ENABLE_DISK_REPORTS === '1' ||
+    process.env.ENABLE_DISK_PERSISTENCE === 'true' ||
+    process.env.ENABLE_DISK_PERSISTENCE === '1';
+
+  if (!diskReportsAllowed) {
+    logger.info(
+      'Disk report persistence is disabled by default (ENABLE_DISK_REPORTS=false). Skipping Markdown report write to disk.'
+    );
+    return null;
+  }
+
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }

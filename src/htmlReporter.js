@@ -45,8 +45,12 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
     return d.toISOString().split('T')[0];
   }
 
-  // Safe JSON serialization of dashboard data for client-side search engine
-  const dashboardDataJson = JSON.stringify({ results, userActivities }).replace(/</g, '\\u003c');
+  // Do not embed the full scanned dataset into unauthenticated HTML/JS responses by default.
+  // Data is fetched dynamically from the authenticated /api/data endpoint unless embedData is explicitly enabled.
+  const shouldEmbedData = Boolean(metadata.embedData);
+  const dashboardDataJson = JSON.stringify(
+    shouldEmbedData ? { results, userActivities } : { results: [], userActivities: [] }
+  ).replace(/</g, '\\u003c');
 
   return `<!DOCTYPE html>
 <html lang="en" data-theme="dark">
@@ -897,6 +901,11 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
           <span id="scanBtnIcon">🔄</span> <span id="scanBtnText">Run Report Now</span>
         </button>
 
+        <!-- API Key Authentication Button -->
+        <button class="btn btn-secondary" id="apiKeyBtn" onclick="promptForApiKey()" title="Set API Key for authenticated /api requests" aria-label="Configure API Key">
+          🔑 API Key
+        </button>
+
         <!-- Search Input with Clear Button -->
         <div class="search-wrapper">
           <label for="searchInput" class="sr-only">Search all items</label>
@@ -905,6 +914,15 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
         </div>
       </div>
     </header>
+
+    <div id="authNoticeBanner" class="alert-banner" role="region" aria-label="API Authentication Status" style="display: ${metadata.requiresClientAuth ? 'block' : 'none'}; background: rgba(88, 166, 255, 0.12); border: 1px solid var(--accent); color: var(--header-text); padding: 12px 16px; border-radius: 8px; margin-bottom: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <div style="font-size: 13px;">
+          <strong>🔒 API Key Required for Scan Data:</strong> Unauthenticated HTML/JS responses do not embed scan datasets. Click <strong>🔑 API Key</strong> to authenticate against <code>/api/data</code>.
+        </div>
+        <button class="btn btn-primary" style="padding: 4px 12px; font-size: 12px;" onclick="promptForApiKey()">Enter API Key</button>
+      </div>
+    </div>
 
     ${metadata.failedRepos && metadata.failedRepos.length > 0 ? `
       <div class="alert-banner" role="alert" style="background: rgba(218, 54, 51, 0.15); border: 1px solid var(--danger); color: var(--header-text); padding: 14px 18px; border-radius: 8px; margin-bottom: 24px;">
@@ -1494,8 +1512,41 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
   </div>
 
   <script>
-    // Embedded Data for Instant Client-side Global Search
-    const DASHBOARD_DATA = ${dashboardDataJson};
+    // Initialized empty in unauthenticated responses; populated via authenticated /api/data fetch
+    let DASHBOARD_DATA = ${dashboardDataJson};
+
+    function getApiKey() {
+      try {
+        return sessionStorage.getItem('fluffy_api_key') || '';
+      } catch (e) {
+        return '';
+      }
+    }
+
+    function getAuthHeaders(extraHeaders = {}) {
+      const headers = Object.assign({}, extraHeaders);
+      const key = getApiKey();
+      if (key) {
+        headers['X-API-Key'] = key;
+      }
+      return headers;
+    }
+
+    function promptForApiKey() {
+      const current = getApiKey();
+      const entered = window.prompt('Enter Dashboard API Key (DASHBOARD_API_KEY):', current);
+      if (entered === null) return;
+      try {
+        if (entered.trim()) {
+          sessionStorage.setItem('fluffy_api_key', entered.trim());
+          showToast('🔑 API Key saved for this session. Loading scan data...', 'info');
+          loadDashboardDataFromApi();
+        } else {
+          sessionStorage.removeItem('fluffy_api_key');
+          showToast('API Key cleared from session.', 'info');
+        }
+      } catch (e) {}
+    }
 
     let previousView = 'repos';
     let currentSearchCategory = 'all';
@@ -1932,6 +1983,78 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       }, 4000);
     }
 
+    // Hydrate DASHBOARD_DATA and dashboard DOM views from authenticated endpoints
+    async function loadDashboardDataFromApi() {
+      if (window.location.protocol === 'file:') return;
+      const key = getApiKey();
+      if (!key) return;
+      try {
+        const [dataRes, htmlRes] = await Promise.all([
+          fetch('/api/data', {
+            method: 'GET',
+            headers: getAuthHeaders(),
+            cache: 'no-store'
+          }),
+          fetch('/', {
+            method: 'GET',
+            headers: getAuthHeaders(),
+            cache: 'no-store'
+          })
+        ]);
+
+        if (!dataRes.ok) {
+          if (dataRes.status === 401 || dataRes.status === 403) {
+            showToast('🔒 Invalid or missing API key. Ensure it matches DASHBOARD_API_KEY in .env', 'error');
+          }
+          return;
+        }
+
+        const data = await dataRes.json();
+        DASHBOARD_DATA = {
+          results: Array.isArray(data.results) ? data.results : [],
+          userActivities: Array.isArray(data.userActivities) ? data.userActivities : []
+        };
+
+        if (htmlRes.ok) {
+          const htmlText = await htmlRes.text();
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(htmlText, 'text/html');
+
+          const newViewRepos = doc.getElementById('viewRepos');
+          const curViewRepos = document.getElementById('viewRepos');
+          if (newViewRepos && curViewRepos) {
+            curViewRepos.innerHTML = newViewRepos.innerHTML;
+          }
+
+          const newViewUsers = doc.getElementById('viewUsers');
+          const curViewUsers = document.getElementById('viewUsers');
+          if (newViewUsers && curViewUsers) {
+            curViewUsers.innerHTML = newViewUsers.innerHTML;
+          }
+
+          const newLastScanned = doc.getElementById('lastScannedText');
+          const curLastScanned = document.getElementById('lastScannedText');
+          if (newLastScanned && curLastScanned) {
+            curLastScanned.innerHTML = newLastScanned.innerHTML;
+          }
+        }
+
+        const banner = document.getElementById('authNoticeBanner');
+        if (banner) banner.style.display = 'none';
+        const badgeRepos = document.getElementById('badgeTotalRepos');
+        if (badgeRepos) badgeRepos.textContent = DASHBOARD_DATA.results.length;
+        const badgeUsers = document.getElementById('badgeTotalContributors');
+        if (badgeUsers) badgeUsers.textContent = DASHBOARD_DATA.userActivities.length;
+        console.log('[Dashboard:Auth] Loaded', DASHBOARD_DATA.results.length, 'repos from authenticated /api/data');
+      } catch (err) {
+        console.warn('[Dashboard:Auth] Failed to fetch /api/data:', err.message);
+      }
+    }
+
+    if ((DASHBOARD_DATA.results || []).length === 0 && getApiKey()) {
+      loadDashboardDataFromApi();
+    }
+
     // Trigger Scan via Server API
     async function triggerScan() {
       if (window.location.protocol === 'file:') {
@@ -1952,7 +2075,10 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
 
       const reqStart = performance.now();
       try {
-        const res = await fetch('/api/scan', { method: 'POST' });
+        const res = await fetch('/api/scan', {
+          method: 'POST',
+          headers: getAuthHeaders()
+        });
         const data = await res.json();
         const durationMs = Math.round(performance.now() - reqStart);
         console.log('[Dashboard:API] POST /api/scan completed in ' + durationMs + 'ms:', data);
@@ -1988,7 +2114,8 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       const reqStart = performance.now();
       try {
         const res = await fetch('/api/repos/' + encodeURIComponent(owner) + '/' + encodeURIComponent(repo), {
-          method: 'DELETE'
+          method: 'DELETE',
+          headers: getAuthHeaders()
         });
         const data = await res.json();
         const durationMs = Math.round(performance.now() - reqStart);
@@ -2031,7 +2158,7 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       try {
         const res = await fetch('/api/repos', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ repoStr })
         });
         const data = await res.json();
@@ -2066,7 +2193,10 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       let reconnectInterval = null;
 
       function connect() {
-        const es = new EventSource('/api/live-reload');
+        const key = getApiKey();
+        if (!key) return;
+        const sseUrl = '/api/live-reload?apiKey=' + encodeURIComponent(key);
+        const es = new EventSource(sseUrl);
 
         es.addEventListener('connected', () => {
           if (isReconnecting) {
@@ -2088,7 +2218,11 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
           if (!reconnectInterval) {
             reconnectInterval = setInterval(async () => {
               try {
-                const res = await fetch('/api/data', { method: 'GET', cache: 'no-store' });
+                const res = await fetch('/api/data', {
+                  method: 'GET',
+                  headers: getAuthHeaders(),
+                  cache: 'no-store'
+                });
                 if (res.ok) {
                   clearInterval(reconnectInterval);
                   reconnectInterval = null;
@@ -2111,9 +2245,29 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
 }
 
 /**
- * Saves HTML report to disk
+ * Checks whether writing HTML/Markdown reports to disk is explicitly enabled via environment variables.
+ * Disabled by default to prevent sensitive repository metadata from persisting on disk.
+ */
+export function isDiskReportEnabled() {
+  return (
+    process.env.ENABLE_DISK_REPORTS === 'true' ||
+    process.env.ENABLE_DISK_REPORTS === '1' ||
+    process.env.ENABLE_DISK_PERSISTENCE === 'true' ||
+    process.env.ENABLE_DISK_PERSISTENCE === '1'
+  );
+}
+
+/**
+ * Saves HTML report to disk only when disk report persistence is explicitly enabled via environment variable
  */
 export function saveHtmlReport(results, userActivities = [], metadata = {}, outputDir = 'reports') {
+  if (!isDiskReportEnabled() && !metadata.forceDiskWrite) {
+    logger.info(
+      'Disk report persistence is disabled by default (ENABLE_DISK_REPORTS=false). Skipping HTML report write to disk.'
+    );
+    return { latestPath: null, archivePath: null, persisted: false };
+  }
+
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
@@ -2132,5 +2286,5 @@ export function saveHtmlReport(results, userActivities = [], metadata = {}, outp
   fs.writeFileSync(latestPath, html, 'utf-8');
   logger.success(`Updated primary dashboard: ${latestPath} (${html.length} bytes)`);
 
-  return { latestPath, archivePath };
+  return { latestPath, archivePath, persisted: true };
 }
