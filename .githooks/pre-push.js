@@ -23,11 +23,13 @@ const isPushAllowed = envAllowPush || configAllowPush;
 
 if (!isPushAllowed) {
   console.error('\n================================================================================');
-  console.error('🔒 PUSH BLOCKED: Pushing changes is disabled by default (allowGitPush = false).');
+  console.error('🔒 PUSH BLOCKED: Restricted-Environment Push Safeguard Active (allowGitPush = false)');
   console.error('================================================================================');
-  console.error('Why: This repository has a safety flag enabled to prevent unintended pushes.');
+  console.error('Why: As a preventative security measure for clones operating in restricted or');
+  console.error('     corporate environments, outbound pushes are disabled by default to prevent');
+  console.error('     accidental upstream publishing of local configurations or changes.');
   console.error('');
-  console.error('How to enable pushing when needed (choose one):');
+  console.error('How to intentionally authorize pushing when needed (choose one):');
   console.error('  • Option 1 (.env):        Set ALLOW_GIT_PUSH=true in your .env file');
   console.error('  • Option 2 (config.json): Set "allowGitPush": true in config.json');
   console.error('  • Option 3 (One-time):    Run with ALLOW_GIT_PUSH=true git push');

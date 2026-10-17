@@ -35,13 +35,13 @@ export const allowGitPush = isGitPushAllowed();
 export function logPushProtectionStatus() {
   if (!isGitPushAllowed()) {
     logger.warn(
-      '🔒 Push Protection Active (allowGitPush = false): Pushing changes is disabled by default.'
+      '🔒 Restricted-Environment Push Safeguard Active (allowGitPush = false): Outbound pushes and write actions are disabled by default to prevent accidental upstream changes.'
     );
     logger.info(
-      '   To allow pushing changes when needed, set ALLOW_GIT_PUSH=true in .env or "allowGitPush": true in config.json.\n'
+      '   To intentionally authorize pushing changes when needed, set ALLOW_GIT_PUSH=true in .env or "allowGitPush": true in config.json.\n'
     );
   } else {
-    logger.info('🔓 Push Protection Flag: ENABLED (pushing changes is allowed by user configuration).\n');
+    logger.info('🔓 Push Protection Flag: ENABLED (pushing changes is explicitly authorized by user configuration).\n');
   }
 }
 

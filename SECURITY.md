@@ -49,16 +49,17 @@ Below are the potential data exposure vectors identified during security auditin
 - **Operational Guidance:**
   - Do not publicly host or share generated files from `reports/` if your scan includes private internal repositories, as `reports/index.html` embeds the full scan dataset (`dashboardDataJson`) for client-side search and filtering.
 
-### 6. Default Push & Write Protection Guard (`ALLOW_GIT_PUSH=false` / `"allowGitPush": false`)
-- **Protection:** Pushing changes or executing write/mutation requests against GitHub is **blocked by default** unless intentionally enabled by the user.
-- **How It Works:**
-  1. **Git `pre-push` Hook (`.githooks/pre-push` & `.githooks/pre-push.js`):** Automatically configured via `git config core.hooksPath .githooks` (and `npm prepare`). Blocks `git push` when `ALLOW_GIT_PUSH` (in `.env`) and `allowGitPush` (in `config.json`) are `false`, displaying clear instructions on how to enable it.
-  2. **Runtime Octokit Request Guard (`src/github.js`):** Intercepts all outgoing Octokit requests and blocks any non-read HTTP method (`POST`, `PUT`, `PATCH`, `DELETE`) or GraphQL `mutation` when `allowGitPush` is `false`.
-  3. **Startup Notice:** Both the CLI (`src/index.js`) and Express server (`src/server.js`) log the current push protection status and instructions at startup.
-- **How to Enable Intentionally:**
-  - Set `ALLOW_GIT_PUSH=true` in `.env`, **or**
-  - Set `"allowGitPush": true` in `config.json`, **or**
-  - Run a one-time push with `ALLOW_GIT_PUSH=true git push`.
+### 6. Restricted-Environment Push & Write Safeguard (`ALLOW_GIT_PUSH=false` / `"allowGitPush": false`)
+- **Security Rationale:** When cloning open-source or internal auditing tools into restricted corporate workstations, bastion hosts, or regulated environments, engineers frequently modify `config.json` (e.g., adding private organization repository names) or local scripts. Without an explicit outbound push lock, an accidental `git push` or automated script could inadvertently publish internal repository identifiers or local environment customizations to an upstream remote.
+- **Fail-Safe Default (`false`):** Outbound Git pushes and mutating GitHub API operations are **disabled by default** out of the box.
+- **Dual-Layer Enforcement:**
+  1. **Git `pre-push` Hook (`.githooks/pre-push` & `.githooks/pre-push.js`):** Automatically registered via `git config core.hooksPath .githooks` (and `npm prepare`). Intercepts every `git push` attempt and aborts execution if both `ALLOW_GIT_PUSH` (in `.env`) and `allowGitPush` (in `config.json`) evaluate to `false`, outputting a clear diagnostic banner with step-by-step opt-in instructions.
+  2. **Runtime Octokit Request Guard (`src/github.js`):** Registers a `before('request')` hook on the Octokit client that inspects all outgoing API calls and blocks any non-read HTTP method (`POST`, `PUT`, `PATCH`, `DELETE`) or GraphQL `mutation` while `allowGitPush` is `false`.
+  3. **Proactive Startup Notice:** Both the CLI (`src/index.js`) and Express server (`src/server.js`) clearly log the active push-protection lock and opt-in instructions at startup.
+- **How to Intentionally Authorize Pushes:**
+  - **Option 1 (`.env`):** Set `ALLOW_GIT_PUSH=true` in your local `.env` file.
+  - **Option 2 (`config.json`):** Set `"allowGitPush": true` in `config.json`.
+  - **Option 3 (Single Command):** Prefix a one-off push with `ALLOW_GIT_PUSH=true git push`.
 
 ---
 
@@ -69,5 +70,5 @@ Below are the potential data exposure vectors identified during security auditin
    - Scope the token strictly to the specific repositories you intend to audit, with **Read-only** permissions for `Contents`, `Metadata`, and `Pull requests`.
 2. **Use `GITHUB_CA_CERT_PATH` Instead of `GITHUB_ALLOW_INSECURE_TLS`:**
    - In corporate proxy environments, always configure `GITHUB_CA_CERT_PATH=/path/to/corporate-ca.pem` rather than leaving `GITHUB_ALLOW_INSECURE_TLS=true` enabled.
-3. **Keep `HOST=127.0.0.1` and `ALLOW_GIT_PUSH=false` for Day-to-Day Usage:**
-   - Only enable `ALLOW_GIT_PUSH=true` when you intentionally want to push commits or perform write actions.
+3. **Keep `HOST=127.0.0.1` and `ALLOW_GIT_PUSH=false` in Restricted Environments:**
+   - Leave `ALLOW_GIT_PUSH=false` (`"allowGitPush": false`) enabled during all routine auditing in restricted or corporate environments, and only toggle it to `true` when intentionally publishing vetted code changes upstream.
