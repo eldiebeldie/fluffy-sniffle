@@ -13,7 +13,7 @@
     "report:html": "node src/index.js --html",
     "report:markdown": "node src/index.js --markdown",
     "docker:build": "docker build -t fluffy-sniffle .",
-    "docker:run": "docker run -d -p 3000:3000 --env-file .env -v ${PWD}/reports:/app/reports fluffy-sniffle"
+    "docker:run": "docker run -d -p 127.0.0.1:3000:3000 --env-file .env -v ${PWD}/reports:/app/reports fluffy-sniffle"
   },
   "keywords": [
     "github",

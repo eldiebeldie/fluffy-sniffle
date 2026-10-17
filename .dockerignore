@@ -3,23 +3,34 @@ node_modules
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.log
 
 # Git and GitHub metadata
 .git
 .gitignore
 .github
 
-# Environment configurations (secrets)
+# Environment configurations & certificates (secrets)
 .env
 .env.local
 .env.*.local
+*.pem
+*.crt
+*.cer
+*.key
 
 # Reports and cached data
 reports/*.html
 reports/*.md
 reports/.cache.json
 
+# Build outputs & IDE files
+bin/
+obj/
+.vs/
+.vscode/
+.idea/
+
 # System artifacts
 .DS_Store
 Thumbs.db
-

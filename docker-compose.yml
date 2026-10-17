@@ -7,10 +7,13 @@ services:
     container_name: fluffy-sniffle
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      # Bind strictly to host loopback interface (127.0.0.1) to prevent LAN exposure
+      - "127.0.0.1:3000:3000"
     environment:
+      - HOST=0.0.0.0
       - PORT=3000
       - NODE_ENV=production
+      - DASHBOARD_READONLY=${DASHBOARD_READONLY:-false}
       # GitHub Personal Access Token (loaded from .env if present)
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
     volumes:
@@ -18,4 +21,3 @@ services:
       - ./reports:/app/reports
       # Mount config.json so configuration changes reflect without rebuilding
       - ./config.json:/app/config.json
-
