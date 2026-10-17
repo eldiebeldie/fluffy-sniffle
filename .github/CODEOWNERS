@@ -12,9 +12,11 @@
 /README.md @EldieBeldie
 /SECURITY.md @EldieBeldie
 /.github/ @EldieBeldie
+/.githooks/ @EldieBeldie
 
 # Configuration, environment, and containers
 /.env.example @EldieBeldie
+/.gitattributes @EldieBeldie
 /.gitignore @EldieBeldie
 /.dockerignore @EldieBeldie
 /Dockerfile @EldieBeldie

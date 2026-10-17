@@ -49,6 +49,17 @@ Below are the potential data exposure vectors identified during security auditin
 - **Operational Guidance:**
   - Do not publicly host or share generated files from `reports/` if your scan includes private internal repositories, as `reports/index.html` embeds the full scan dataset (`dashboardDataJson`) for client-side search and filtering.
 
+### 6. Default Push & Write Protection Guard (`ALLOW_GIT_PUSH=false` / `"allowGitPush": false`)
+- **Protection:** Pushing changes or executing write/mutation requests against GitHub is **blocked by default** unless intentionally enabled by the user.
+- **How It Works:**
+  1. **Git `pre-push` Hook (`.githooks/pre-push` & `.githooks/pre-push.js`):** Automatically configured via `git config core.hooksPath .githooks` (and `npm prepare`). Blocks `git push` when `ALLOW_GIT_PUSH` (in `.env`) and `allowGitPush` (in `config.json`) are `false`, displaying clear instructions on how to enable it.
+  2. **Runtime Octokit Request Guard (`src/github.js`):** Intercepts all outgoing Octokit requests and blocks any non-read HTTP method (`POST`, `PUT`, `PATCH`, `DELETE`) or GraphQL `mutation` when `allowGitPush` is `false`.
+  3. **Startup Notice:** Both the CLI (`src/index.js`) and Express server (`src/server.js`) log the current push protection status and instructions at startup.
+- **How to Enable Intentionally:**
+  - Set `ALLOW_GIT_PUSH=true` in `.env`, **or**
+  - Set `"allowGitPush": true` in `config.json`, **or**
+  - Run a one-time push with `ALLOW_GIT_PUSH=true git push`.
+
 ---
 
 ## 🔐 Recommended Operational Best Practices
@@ -58,5 +69,5 @@ Below are the potential data exposure vectors identified during security auditin
    - Scope the token strictly to the specific repositories you intend to audit, with **Read-only** permissions for `Contents`, `Metadata`, and `Pull requests`.
 2. **Use `GITHUB_CA_CERT_PATH` Instead of `GITHUB_ALLOW_INSECURE_TLS`:**
    - In corporate proxy environments, always configure `GITHUB_CA_CERT_PATH=/path/to/corporate-ca.pem` rather than leaving `GITHUB_ALLOW_INSECURE_TLS=true` enabled.
-3. **Keep `HOST=127.0.0.1` for Local Usage:**
-   - Only override `HOST=0.0.0.0` if you are intentionally deploying behind an authenticated reverse proxy, VPN, or isolated container network, and enable `DASHBOARD_READONLY=true` when exposing the dashboard to multiple viewers.
+3. **Keep `HOST=127.0.0.1` and `ALLOW_GIT_PUSH=false` for Day-to-Day Usage:**
+   - Only enable `ALLOW_GIT_PUSH=true` when you intentionally want to push commits or perform write actions.

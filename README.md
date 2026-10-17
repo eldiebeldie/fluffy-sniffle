@@ -198,6 +198,9 @@ Configure your credentials, security binding, and TLS options in `.env`:
 # GitHub Personal Access Token (Classic with repo scope, or Fine-grained with PR/Contents Read)
 GITHUB_TOKEN=ghp_your_token_here
 
+# Push & Write Protection Flag (default: false — blocks git push & write actions unless set to true)
+ALLOW_GIT_PUSH=false
+
 # Server Network & Security Configuration (defaults to localhost-only)
 HOST=127.0.0.1
 PORT=3000
@@ -214,10 +217,11 @@ GITHUB_ALLOW_INSECURE_TLS=false
 
 ## ⚙️ Configuration (`config.json`)
 
-Configure stale thresholds and your target repositories in `config.json`:
+Configure push protection, stale thresholds, and your target repositories in `config.json`:
 
 ```json
 {
+  "allowGitPush": false,
   "defaultStaleDays": 30,
   "warnStaleDays": 60,
   "repositories": [
@@ -361,7 +365,8 @@ GITHUB_ALLOW_INSECURE_TLS=true
 > [!WARNING]
 > Insecure TLS mode bypasses server certificate verification (`NODE_TLS_REJECT_UNAUTHORIZED='0'`). Use exclusively for local troubleshooting. It must **never** be enabled in production environments.
 
-### 3. Credential Safety, Network Isolation & Logging
+### 3. Credential Safety, Push Protection, Network Isolation & Logging
+- **Default Push Protection (`ALLOW_GIT_PUSH=false` / `"allowGitPush": false`):** Pushing changes via `git push` (enforced by `.githooks/pre-push`) or executing write/mutation requests against GitHub is disabled by default. When set to `false`, the app displays a clear message explaining the limitation and how to enable it (`ALLOW_GIT_PUSH=true` in `.env` or `"allowGitPush": true` in `config.json`).
 - **Full Secret Redaction:** Token presence is logged strictly with non-secret prefix masking (`ghp_****...****`) — zero secret suffix characters or plaintext tokens are ever emitted to logs or stdout.
 - **Localhost Loopback Binding (`127.0.0.1`):** Both the Express server (`HOST=127.0.0.1`) and Docker port mappings (`127.0.0.1:3000:3000`) bind to loopback by default so other devices on the local network cannot access `/api/data` or probe `/api/repos`.
 - **Optional Read-Only Mode (`DASHBOARD_READONLY=true`):** Locks `POST /api/repos` and `DELETE /api/repos/:owner/:repo` to prevent runtime modifications to tracked repositories.

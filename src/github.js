@@ -2,9 +2,48 @@ import { Octokit } from '@octokit/rest';
 import dotenv from 'dotenv';
 import https from 'node:https';
 import fs from 'node:fs';
+import path from 'node:path';
 import { logger } from './logger.js';
 
 dotenv.config();
+
+/**
+ * Checks whether pushing / writing changes to Git or GitHub is allowed.
+ * Set to false by default unless intentionally enabled by the user.
+ */
+export function isGitPushAllowed() {
+  if (process.env.ALLOW_GIT_PUSH === 'true' || process.env.ALLOW_GIT_PUSH === '1') {
+    return true;
+  }
+  try {
+    const cfgPath = path.resolve(process.cwd(), 'config.json');
+    if (fs.existsSync(cfgPath)) {
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+      if (cfg.allowGitPush === true) return true;
+    }
+  } catch {
+    // Default to false on read error
+  }
+  return false;
+}
+
+export const allowGitPush = isGitPushAllowed();
+
+/**
+ * Logs an easy-to-read message explaining the push protection limitation and how to change it.
+ */
+export function logPushProtectionStatus() {
+  if (!isGitPushAllowed()) {
+    logger.warn(
+      '🔒 Push Protection Active (allowGitPush = false): Pushing changes is disabled by default.'
+    );
+    logger.info(
+      '   To allow pushing changes when needed, set ALLOW_GIT_PUSH=true in .env or "allowGitPush": true in config.json.\n'
+    );
+  } else {
+    logger.info('🔓 Push Protection Flag: ENABLED (pushing changes is allowed by user configuration).\n');
+  }
+}
 
 /**
  * Safely masks a token for logging without exposing any secret characters (e.g. ghp_****...****)
@@ -100,6 +139,28 @@ export const octokit = new Octokit({
     agent: httpsAgent,
     fetch: customFetch,
   },
+});
+
+// Enforce read-only GitHub API interactions when allowGitPush is false (default)
+octokit.hook.before('request', async (options) => {
+  if (isGitPushAllowed()) return;
+
+  const method = (options.method || 'GET').toUpperCase();
+  if (method === 'GET' || method === 'HEAD') return;
+
+  // Allow read-only GraphQL queries (POST /graphql with query, but block GraphQL mutations)
+  if (method === 'POST' && options.url === '/graphql') {
+    const queryStr = typeof options.query === 'string' ? options.query : JSON.stringify(options.data || '');
+    if (!/\bmutation\b/i.test(queryStr)) {
+      return;
+    }
+  }
+
+  const errMsg =
+    `Push/write action blocked (${method} ${options.url}): pushing changes is disabled by default (allowGitPush = false). ` +
+    `To enable it, set ALLOW_GIT_PUSH=true in .env or "allowGitPush": true in config.json.`;
+  logger.error(errMsg);
+  throw new Error(errMsg);
 });
 
 /**
