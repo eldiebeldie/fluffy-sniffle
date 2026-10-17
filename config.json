@@ -1,4 +1,5 @@
 {
+  "allowGitPush": false,
   "defaultStaleDays": 30,
   "warnStaleDays": 60,
   "repositories": [

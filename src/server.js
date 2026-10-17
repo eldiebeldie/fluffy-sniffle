@@ -11,6 +11,7 @@ import {
   token,
   maskToken,
   isPlaceholder,
+  logPushProtectionStatus,
 } from './github.js';
 import { analyzeRepository, aggregateUserActivities } from './analyzer.js';
 import { generateHtmlReport, saveHtmlReport } from './htmlReporter.js';
@@ -429,6 +430,8 @@ app.listen(PORT, HOST, async () => {
   } else {
     logger.success(`GitHub Token detected (masked: ${maskToken(token)}). Using authenticated GraphQL API.\n`);
   }
+
+  logPushProtectionStatus();
 
   // Check if we have cached results for instant startup
   const diskCache = loadCache();

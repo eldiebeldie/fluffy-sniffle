@@ -173,7 +173,7 @@ stateDiagram-v2
   - 👁️ **High Contrast (Section 508 / WCAG AAA):** Pure black (`#000000`) canvas, pure white (`#ffffff`) text, high-visibility borders ($\ge 7:1$ contrast ratio).
   - **Section 508 Features:** Skip-to-content navigation links, visible focus indicator rings (`:focus-visible`), dual visual indicators (icons + text labels so information doesn't rely solely on color), semantic table headers (`scope="col"`), screen-reader labels (`.sr-only`), and `localStorage` persistence.
 - **🔒 Enterprise TLS & Custom CA Integration:** Built-in custom CA certificate bundle support (`GITHUB_CA_CERT_PATH` / `NODE_EXTRA_CA_CERTS`) and diagnostic insecure TLS toggle (`GITHUB_ALLOW_INSECURE_TLS`). Ensures reliable operation behind corporate proxies, custom PKI infrastructures, and enterprise firewall gateways across both Node HTTPS and fetch/undici HTTP transports.
-- **🛡️ Masked Credential Logging, Loopback Isolation & Placeholder Detection:** Startup credential inspection with full secret redaction (`ghp_****...****`), `127.0.0.1` loopback-by-default server binding, optional `DASHBOARD_READONLY` lock mode, proactive warnings for unconfigured placeholder values (`your_github_pat_token_here`), and explicit owner/repo GitHub URLs (`https://github.com/owner/repo`) on all fetch, scan, success, and error logs. See [`SECURITY.md`](SECURITY.md).
+- **🛡️ Restricted-Environment Push Safeguard & Zero-Leak Hardening:** Ships with a fail-safe push and write lock (`ALLOW_GIT_PUSH=false` / `"allowGitPush": false`) engineered for operators cloning this repository onto restricted corporate workstations, bastion hosts, or regulated environments. Prevents accidental upstream Git pushes and mutating GitHub API calls unless explicitly opted into by the user, alongside full secret redaction (`ghp_****...****`) and `127.0.0.1` loopback-only binding. See [`SECURITY.md`](SECURITY.md).
 - **📝 Comprehensive Activity Logging:** Colorized console logging with precise millisecond timestamps, action tags, and HTTP request tracking.
 
 ---
@@ -187,6 +187,10 @@ cd fluffy-sniffle
 npm install
 ```
 
+> [!IMPORTANT]
+> **Security Safeguard for Restricted & Corporate Environments (`allowGitPush = false`):**  
+> `npm install` automatically activates a local Git `pre-push` hook (`.githooks/pre-push`) and runtime API write guard that **block all outbound pushes and repository mutations by default**. This ensures that anyone cloning and running the tool inside a restricted or regulated environment cannot inadvertently push local configuration edits, internal repo lists, or commits upstream. When you intentionally wish to push changes, set `ALLOW_GIT_PUSH=true` in `.env` or `"allowGitPush": true` in `config.json`.
+
 ### 2. Configure Environment (`.env`)
 Copy the environment template:
 ```bash
@@ -197,6 +201,9 @@ Configure your credentials, security binding, and TLS options in `.env`:
 ```env
 # GitHub Personal Access Token (Classic with repo scope, or Fine-grained with PR/Contents Read)
 GITHUB_TOKEN=ghp_your_token_here
+
+# Restricted-Environment Push Safeguard (default: false — blocks git push & write actions unless explicitly enabled)
+ALLOW_GIT_PUSH=false
 
 # Server Network & Security Configuration (defaults to localhost-only)
 HOST=127.0.0.1
@@ -214,10 +221,11 @@ GITHUB_ALLOW_INSECURE_TLS=false
 
 ## ⚙️ Configuration (`config.json`)
 
-Configure stale thresholds and your target repositories in `config.json`:
+Configure push protection, stale thresholds, and your target repositories in `config.json`:
 
 ```json
 {
+  "allowGitPush": false,
   "defaultStaleDays": 30,
   "warnStaleDays": 60,
   "repositories": [
@@ -361,7 +369,8 @@ GITHUB_ALLOW_INSECURE_TLS=true
 > [!WARNING]
 > Insecure TLS mode bypasses server certificate verification (`NODE_TLS_REJECT_UNAUTHORIZED='0'`). Use exclusively for local troubleshooting. It must **never** be enabled in production environments.
 
-### 3. Credential Safety, Network Isolation & Logging
+### 3. Credential Safety, Restricted-Environment Push Safeguard, Network Isolation & Logging
+- **Restricted-Environment Push & Write Safeguard (`ALLOW_GIT_PUSH=false` / `"allowGitPush": false`):** Built as a preventative security guardrail for engineers cloning and operating this repository inside restricted, air-gapped, or regulated corporate environments. By default, outbound `git push` operations (enforced via `.githooks/pre-push`) and mutating GitHub API calls (enforced via Octokit request hooks) are locked to prevent accidental upstream pushes of local configuration changes or internal repository lists. When locked, the application and Git hook emit clear, step-by-step instructions on how to intentionally authorize pushes (`ALLOW_GIT_PUSH=true` in `.env` or `"allowGitPush": true` in `config.json`).
 - **Full Secret Redaction:** Token presence is logged strictly with non-secret prefix masking (`ghp_****...****`) — zero secret suffix characters or plaintext tokens are ever emitted to logs or stdout.
 - **Localhost Loopback Binding (`127.0.0.1`):** Both the Express server (`HOST=127.0.0.1`) and Docker port mappings (`127.0.0.1:3000:3000`) bind to loopback by default so other devices on the local network cannot access `/api/data` or probe `/api/repos`.
 - **Optional Read-Only Mode (`DASHBOARD_READONLY=true`):** Locks `POST /api/repos` and `DELETE /api/repos/:owner/:repo` to prevent runtime modifications to tracked repositories.

@@ -9,6 +9,7 @@ import {
   token,
   maskToken,
   isPlaceholder,
+  logPushProtectionStatus,
 } from './github.js';
 import { analyzeRepository, aggregateUserActivities } from './analyzer.js';
 import { printOverviewTable, printDetailedRepo, printUserOverviewTable, saveMarkdownReport } from './reporter.js';
@@ -47,6 +48,8 @@ async function main() {
   } else {
     logger.success(`GitHub Token detected (masked: ${maskToken(token)}). Using authenticated GraphQL API.\n`);
   }
+
+  logPushProtectionStatus();
 
   // Read config
   const configPath = path.resolve(process.cwd(), 'config.json');
