@@ -13,11 +13,11 @@ import {
 } from './github.js';
 import { analyzeRepository, aggregateUserActivities } from './analyzer.js';
 import { printOverviewTable, printDetailedRepo, printUserOverviewTable, saveMarkdownReport } from './reporter.js';
-import { saveHtmlReport } from './htmlReporter.js';
+import { saveHtmlReport, isDiskReportEnabled } from './htmlReporter.js';
 import { logger } from './logger.js';
 
 function openInBrowser(filePath) {
-  logger.action('Open Browser', filePath);
+  logger.action('Open Browser', path.basename(filePath));
   const fullPath = path.resolve(filePath);
   const [cmd, args] =
     process.platform === 'win32'
@@ -62,17 +62,18 @@ async function main() {
   if (fs.existsSync(configPath)) {
     try {
       config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      logger.info(`Loaded configuration from ${configPath} (${(config.repositories || []).length} repositories configured)`);
+      logger.info(`Loaded configuration from config.json (${(config.repositories || []).length} repositories configured)`);
     } catch (err) {
       logger.error(`Failed to parse config.json: ${err.message}`);
       process.exit(1);
     }
   }
 
-  // Check command line arguments
+  // Check command line arguments & disk persistence settings (disabled by default)
   const args = process.argv.slice(2);
-  const shouldSaveMarkdown = args.includes('--markdown');
-  const shouldSaveHtml = args.includes('--html') || args.includes('--open') || true;
+  const diskReportsAllowed = isDiskReportEnabled();
+  const shouldSaveMarkdown = args.includes('--markdown') && diskReportsAllowed;
+  const shouldSaveHtml = (args.includes('--html') || args.includes('--open') || diskReportsAllowed) && diskReportsAllowed;
   const shouldOpenBrowser = args.includes('--open');
   const showAllTime = args.includes('--all-time');
 
@@ -131,23 +132,30 @@ async function main() {
   // Print contributor summary to terminal
   printUserOverviewTable(userActivities, { allTime: showAllTime });
 
-  // Generate HTML Dashboard
+  // Generate HTML Dashboard only when disk report persistence is enabled
   if (shouldSaveHtml) {
-    const { latestPath, archivePath } = saveHtmlReport(results, userActivities);
-    const fileUrl = `file:///${path.resolve(latestPath).replace(/\\/g, '/')}`;
-    console.log(chalk.bold.green(`\n🌐 HTML Dashboard generated:`));
-    console.log(chalk.cyan(`   Latest:  ${fileUrl}`));
-    console.log(chalk.gray(`   Archive: ${archivePath}`));
+    const { latestPath, archivePath, persisted } = saveHtmlReport(results, userActivities);
+    if (persisted && latestPath) {
+      console.log(chalk.bold.green(`\n🌐 HTML Dashboard generated:`));
+      console.log(chalk.cyan(`   Latest:  ${latestPath}`));
+      console.log(chalk.gray(`   Archive: ${archivePath}`));
 
-    if (shouldOpenBrowser) {
-      openInBrowser(latestPath);
+      if (shouldOpenBrowser) {
+        openInBrowser(latestPath);
+      }
     }
+  } else {
+    logger.info(
+      'Disk report writing is disabled by default (no-disk-report mode). Set ENABLE_DISK_REPORTS=true to save HTML/Markdown reports to disk.'
+    );
   }
 
-  // Generate Markdown report if requested
+  // Generate Markdown report if requested and disk reports are enabled
   if (shouldSaveMarkdown) {
     const reportPath = saveMarkdownReport(results, userActivities);
-    logger.success(`Markdown report saved: ${reportPath}`);
+    if (reportPath) {
+      logger.success(`Markdown report saved: ${reportPath}`);
+    }
   }
 
   logger.success('CLI scan completed successfully!');
