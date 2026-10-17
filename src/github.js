@@ -56,10 +56,10 @@ export function maskToken(rawToken) {
   const knownPrefixes = ['github_pat_', 'ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_'];
   for (const prefix of knownPrefixes) {
     if (trimmed.startsWith(prefix)) {
-      return `${prefix}****...****`;
+      return `${prefix}<TOKEN>`;
     }
   }
-  return '****...****';
+  return '<TOKEN>';
 }
 
 /**
@@ -71,6 +71,8 @@ export function isPlaceholderToken(rawToken) {
   return (
     trimmed === 'your_github_pat_token_here' ||
     trimmed === 'your_token_here' ||
+    trimmed === 'your_dashboard_api_key_here' ||
+    trimmed === 'your_api_key_here' ||
     trimmed === 'ghp_your_token_here' ||
     trimmed === 'token' ||
     trimmed === 'ghp_xxx' ||
@@ -103,16 +105,21 @@ const allowInsecureTls =
 
 let caBundle = undefined;
 if (caCertPath) {
-  if (fs.existsSync(caCertPath)) {
+  const isCertPlaceholder =
+    caCertPath.trim().startsWith('<') ||
+    caCertPath.trim().toLowerCase().includes('path/to/');
+  if (isCertPlaceholder) {
+    logger.warn('GITHUB_CA_CERT_PATH appears to be a placeholder (<CERT_PATH>). Using default system CA store.');
+  } else if (fs.existsSync(caCertPath)) {
     try {
       caBundle = fs.readFileSync(caCertPath);
       process.env.NODE_EXTRA_CA_CERTS = caCertPath;
-      logger.info(`Loaded custom CA certificate bundle from: ${caCertPath}`);
+      logger.info('Loaded custom CA certificate bundle from configured <CERT_PATH>');
     } catch (err) {
-      logger.error(`Failed to read custom CA certificate file at ${caCertPath}: ${err.message}`);
+      logger.error(`Failed to read custom CA certificate file at <CERT_PATH>: ${err.message}`);
     }
   } else {
-    logger.warn(`Configured GITHUB_CA_CERT_PATH file not found: ${caCertPath}`);
+    logger.warn('Configured GITHUB_CA_CERT_PATH file not found at <CERT_PATH>');
   }
 }
 
@@ -121,15 +128,128 @@ if (allowInsecureTls) {
   logger.warn('INSECURE TLS MODE ENABLED: Certificate verification is disabled. Use for local troubleshooting only!');
 }
 
-const httpsAgent = new https.Agent({
+const tlsConnectOptions = {
   rejectUnauthorized: !allowInsecureTls,
   ...(caBundle ? { ca: caBundle } : {}),
-});
+};
 
-const customFetch = (url, options = {}) => {
+export const httpsAgent = new https.Agent(tlsConnectOptions);
+
+/**
+ * Resolve an Undici Agent dispatcher configured with our TLS options when available
+ */
+let undiciDispatcherPromise = null;
+async function getUndiciDispatcher() {
+  if (undiciDispatcherPromise !== null) return undiciDispatcherPromise;
+  undiciDispatcherPromise = (async () => {
+    try {
+      const undiciMod = await import('undici');
+      if (undiciMod && typeof undiciMod.Agent === 'function') {
+        return new undiciMod.Agent({ connect: tlsConnectOptions });
+      }
+    } catch {
+      // Fallback to inspecting Node's internal undici globalDispatcher symbol
+    }
+    try {
+      const sym = Object.getOwnPropertySymbols(globalThis).find((s) =>
+        s.toString().includes('undici.globalDispatcher')
+      );
+      const globalDisp = sym ? globalThis[sym] : null;
+      if (globalDisp && typeof globalDisp.constructor === 'function') {
+        return new globalDisp.constructor({ connect: tlsConnectOptions });
+      }
+    } catch {
+      // Ignore if symbol is not yet initialized
+    }
+    return null;
+  })();
+  return undiciDispatcherPromise;
+}
+
+/**
+ * Execute an HTTPS request using node:https and httpsAgent to guarantee custom CA / TLS enforcement
+ * even when Undici dispatcher is unavailable.
+ */
+function fetchViaHttpsAgent(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(String(url));
+    const headers = {};
+    if (options.headers) {
+      if (typeof options.headers.entries === 'function') {
+        for (const [k, v] of options.headers.entries()) headers[k] = v;
+      } else if (Array.isArray(options.headers)) {
+        for (const [k, v] of options.headers) headers[k] = v;
+      } else {
+        Object.assign(headers, options.headers);
+      }
+    }
+
+    const req = https.request(
+      parsedUrl,
+      {
+        method: options.method || 'GET',
+        headers,
+        agent: httpsAgent,
+        rejectUnauthorized: !allowInsecureTls,
+        ...(caBundle ? { ca: caBundle } : {}),
+      },
+      (res) => {
+        const chunks = [];
+        res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+        res.on('end', () => {
+          const bodyBuffer = Buffer.concat(chunks);
+          const responseHeaders = new Headers();
+          for (const [key, val] of Object.entries(res.headers)) {
+            if (Array.isArray(val)) {
+              val.forEach((v) => responseHeaders.append(key, v));
+            } else if (val !== undefined) {
+              responseHeaders.set(key, String(val));
+            }
+          }
+          const status = res.statusCode || 200;
+          const body = status === 204 || status === 205 || status === 304 ? null : bodyBuffer;
+          resolve(
+            new Response(body, {
+              status,
+              statusText: res.statusMessage || '',
+              headers: responseHeaders,
+            })
+          );
+        });
+      }
+    );
+
+    req.on('error', reject);
+    if (options.signal) {
+      if (options.signal.aborted) {
+        req.destroy(new Error('Request aborted'));
+        return;
+      }
+      options.signal.addEventListener('abort', () => req.destroy(new Error('Request aborted')), { once: true });
+    }
+
+    if (options.body) {
+      if (typeof options.body === 'string' || Buffer.isBuffer(options.body) || options.body instanceof Uint8Array) {
+        req.write(options.body);
+      } else {
+        req.write(String(options.body));
+      }
+    }
+    req.end();
+  });
+}
+
+export const customFetch = async (url, options = {}) => {
+  const dispatcher = await getUndiciDispatcher();
+  // When custom CA or insecure TLS is configured and no Undici dispatcher was constructed yet,
+  // use node:https with httpsAgent so custom TLS settings are strictly applied.
+  if ((caBundle || allowInsecureTls) && !dispatcher && String(url).startsWith('https:')) {
+    return fetchViaHttpsAgent(url, options);
+  }
   return fetch(url, {
     ...options,
     agent: httpsAgent,
+    ...(dispatcher ? { dispatcher } : {}),
   });
 };
 

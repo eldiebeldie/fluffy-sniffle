@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'node:crypto';
 import fs from 'fs';
 import path from 'path';
 import { execFile } from 'child_process';
@@ -11,23 +12,52 @@ import {
   token,
   maskToken,
   isPlaceholder,
+  isPlaceholderToken,
   logPushProtectionStatus,
 } from './github.js';
 import { analyzeRepository, aggregateUserActivities } from './analyzer.js';
-import { generateHtmlReport, saveHtmlReport } from './htmlReporter.js';
+import { generateHtmlReport, saveHtmlReport, isDiskReportEnabled } from './htmlReporter.js';
 import { logger } from './logger.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
+// Bind strictly to localhost (127.0.0.1) by default to prevent unintended LAN exposure
 const HOST = process.env.HOST || '127.0.0.1';
+// Optional read-only lock for POST/DELETE /api/repos endpoints
 const isReadOnly =
   process.env.DASHBOARD_READONLY === 'true' || process.env.DASHBOARD_READONLY === '1';
+// Optional authentication requirement for the root / dashboard route
+const isDashboardAuthRequired =
+  process.env.DASHBOARD_REQUIRE_AUTH === 'true' ||
+  process.env.DASHBOARD_REQUIRE_AUTH === '1' ||
+  process.env.DASHBOARD_AUTH_REQUIRED === 'true' ||
+  process.env.DASHBOARD_AUTH_REQUIRED === '1';
+// No-disk persistence by default: cache and HTML/Markdown reports are only written when explicitly enabled
+const enableDiskCache =
+  process.env.ENABLE_DISK_CACHE === 'true' ||
+  process.env.ENABLE_DISK_CACHE === '1' ||
+  process.env.ENABLE_DISK_PERSISTENCE === 'true' ||
+  process.env.ENABLE_DISK_PERSISTENCE === '1';
+const enableDiskReports = isDiskReportEnabled();
+const enableEmbeddedReportData =
+  process.env.ENABLE_EMBEDDED_REPORT_DATA === 'true' ||
+  process.env.ENABLE_EMBEDDED_REPORT_DATA === '1';
+
+// API key authentication for all /api/* routes (falls back to an ephemeral key if unconfigured or placeholder)
+const rawConfiguredApiKey = (process.env.DASHBOARD_API_KEY || process.env.API_KEY || '').trim();
+const isApiKeyPlaceholder = isPlaceholderToken(rawConfiguredApiKey);
+const hasConfiguredApiKey = Boolean(rawConfiguredApiKey && !isApiKeyPlaceholder);
+// Always enforce an active API key on /api routes (ephemeral key if not configured in .env)
+const activeApiKey = hasConfiguredApiKey
+  ? rawConfiguredApiKey
+  : crypto.randomBytes(24).toString('hex');
+
 const configPath = path.resolve(process.cwd(), 'config.json');
 
 const isDevMode = process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
-const cachePath = path.resolve(process.cwd(), 'reports', '.cache.json');
+const cachePath = enableDiskCache ? path.resolve(process.cwd(), 'reports', '.cache.json') : null;
 const sseClients = new Set();
 
 // In-memory cache
@@ -39,15 +69,104 @@ let isScanning = false;
 
 app.use(express.json());
 
+/**
+ * Redacts sensitive query parameters (e.g. apiKey, token) from logged request URLs
+ */
+function sanitizeRequestPath(rawPath) {
+  if (!rawPath || typeof rawPath !== 'string') return '/';
+  return rawPath.replace(/([?&](?:api[_-]?key|token)=)[^&#]*/gi, '$1<TOKEN>');
+}
+
+/**
+ * Extracts API key from X-API-Key header, Authorization Bearer/Basic header, or query parameter
+ */
+function extractRequestApiKey(req) {
+  const headerKey = req.headers['x-api-key'];
+  if (typeof headerKey === 'string' && headerKey.trim()) {
+    return headerKey.trim();
+  }
+
+  const authHeader = req.headers.authorization;
+  if (typeof authHeader === 'string' && authHeader.trim()) {
+    const trimmed = authHeader.trim();
+    if (/^Bearer\s+/i.test(trimmed)) {
+      return trimmed.replace(/^Bearer\s+/i, '').trim();
+    }
+    if (/^Basic\s+/i.test(trimmed)) {
+      try {
+        const decoded = Buffer.from(trimmed.replace(/^Basic\s+/i, '').trim(), 'base64').toString('utf-8');
+        const colonIdx = decoded.indexOf(':');
+        const passPart = colonIdx >= 0 ? decoded.slice(colonIdx + 1) : decoded;
+        const userPart = colonIdx >= 0 ? decoded.slice(0, colonIdx) : '';
+        return (passPart || userPart).trim();
+      } catch {
+        return '';
+      }
+    }
+  }
+
+  const queryKey = req.query?.apiKey || req.query?.api_key;
+  if (typeof queryKey === 'string' && queryKey.trim()) {
+    return queryKey.trim();
+  }
+
+  return '';
+}
+
+/**
+ * Constant-time API key verification
+ */
+function isRequestAuthenticated(req) {
+  const provided = extractRequestApiKey(req);
+  if (!provided || !activeApiKey) return false;
+  const providedBuf = Buffer.from(provided, 'utf-8');
+  const expectedBuf = Buffer.from(activeApiKey, 'utf-8');
+  if (providedBuf.length !== expectedBuf.length) return false;
+  return crypto.timingSafeEqual(providedBuf, expectedBuf);
+}
+
+/**
+ * Middleware: Require API key authentication on all /api routes
+ */
+function requireApiAuth(req, res, next) {
+  if (!isRequestAuthenticated(req)) {
+    logger.warn(
+      `Unauthorized API request rejected: ${req.method} ${sanitizeRequestPath(req.originalUrl || req.url)}`
+    );
+    return res.status(401).json({
+      success: false,
+      error:
+        'Unauthorized: valid API key required. Provide X-API-Key or Authorization: Bearer <API_KEY> header.',
+    });
+  }
+  next();
+}
+
+/**
+ * Middleware: Optional authentication for root / dashboard route when DASHBOARD_REQUIRE_AUTH=true
+ */
+function optionalDashboardAuth(req, res, next) {
+  if (isDashboardAuthRequired && !isRequestAuthenticated(req)) {
+    logger.warn(
+      `Unauthorized dashboard request rejected (DASHBOARD_REQUIRE_AUTH=true): ${req.method} ${sanitizeRequestPath(req.originalUrl || req.url)}`
+    );
+    res.setHeader('WWW-Authenticate', 'Bearer realm="Fluffy-Sniffle Dashboard"');
+    return res.status(401).send(
+      '401 Unauthorized: Dashboard authentication is enabled (DASHBOARD_REQUIRE_AUTH=true). Provide a valid API key via X-API-Key or Authorization header.'
+    );
+  }
+  next();
+}
+
 // Request duration and access logging middleware
 app.use((req, res, next) => {
   const startTime = Date.now();
-  const path = req.originalUrl || req.url;
+  const safePath = sanitizeRequestPath(req.originalUrl || req.url);
 
   res.on('finish', () => {
     const elapsedMs = Date.now() - startTime;
     const status = res.statusCode;
-    const logMsg = `${req.method} ${path} -> ${status} (${elapsedMs}ms)`;
+    const logMsg = `${req.method} ${safePath} -> ${status} (${elapsedMs}ms)`;
     if (status >= 400) {
       logger.error(`[HTTP] ${logMsg}`);
     } else {
@@ -57,6 +176,9 @@ app.use((req, res, next) => {
 
   next();
 });
+
+// Protect all /api routes with API key authentication middleware
+app.use('/api', requireApiAuth);
 
 function openInBrowser(url) {
   logger.action('Open Browser', url);
@@ -75,9 +197,12 @@ function openInBrowser(url) {
 }
 
 /**
- * Save scan cache to disk for instant dev server restart
+ * Save scan cache to disk only when ENABLE_DISK_CACHE=true (disabled by default)
  */
 function saveCache(data) {
+  if (!enableDiskCache || !cachePath) {
+    return;
+  }
   try {
     const dir = path.dirname(cachePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -88,9 +213,12 @@ function saveCache(data) {
 }
 
 /**
- * Load scan cache from disk
+ * Load scan cache from disk only when ENABLE_DISK_CACHE=true (disabled by default)
  */
 function loadCache() {
+  if (!enableDiskCache || !cachePath) {
+    return null;
+  }
   if (fs.existsSync(cachePath)) {
     try {
       const data = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
@@ -138,7 +266,7 @@ function loadConfig() {
  */
 function saveConfig(config) {
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
-  logger.info(`Updated ${configPath}`);
+  logger.info('Updated config.json');
 }
 
 /**
@@ -190,21 +318,26 @@ async function performScan(customRepos = null) {
     cachedFailedRepos = failedRepos;
     lastScanTime = new Date().toISOString();
 
-    // Persist to reports/index.html
-    saveHtmlReport(cachedResults, cachedUserActivities, {
-      lastScanTime,
-      failedRepos: cachedFailedRepos,
-      isDev: isDevMode,
-    });
+    // Persist to reports/index.html only when explicitly enabled via ENABLE_DISK_REPORTS=true
+    if (enableDiskReports) {
+      saveHtmlReport(cachedResults, cachedUserActivities, {
+        lastScanTime,
+        failedRepos: cachedFailedRepos,
+        isDev: isDevMode,
+        embedData: enableEmbeddedReportData,
+      });
+    }
 
-    // Save to disk cache for instant startup
-    saveCache({
-      results: cachedResults,
-      userActivities: cachedUserActivities,
-      failedRepos: cachedFailedRepos,
-      lastScanTime,
-      repoKeys: (config.repositories || []).map((r) => `${r.owner}/${r.repo}`).sort(),
-    });
+    // Save to disk cache only when explicitly enabled via ENABLE_DISK_CACHE=true
+    if (enableDiskCache) {
+      saveCache({
+        results: cachedResults,
+        userActivities: cachedUserActivities,
+        failedRepos: cachedFailedRepos,
+        lastScanTime,
+        repoKeys: (config.repositories || []).map((r) => `${r.owner}/${r.repo}`).sort(),
+      });
+    }
 
     const elapsedMs = Date.now() - startTime;
     logger.success(
@@ -230,15 +363,25 @@ async function performScan(customRepos = null) {
 // ----------------------------------------------------
 
 /**
- * Main dashboard view
+ * Main dashboard view (with optional authentication via DASHBOARD_REQUIRE_AUTH=true)
+ * Unauthenticated responses never embed the scanned dataset in HTML or JS.
  */
-app.get('/', (req, res) => {
-  logger.info('Rendering dashboard for client request');
-  const html = generateHtmlReport(cachedResults, cachedUserActivities, {
-    lastScanTime,
-    failedRepos: cachedFailedRepos,
-    isDev: isDevMode,
-  });
+app.get('/', optionalDashboardAuth, (req, res) => {
+  const authenticated = isRequestAuthenticated(req);
+  logger.info(
+    `Rendering dashboard for client request (authenticated: ${authenticated ? 'yes' : 'no'})`
+  );
+  const html = generateHtmlReport(
+    authenticated ? cachedResults : [],
+    authenticated ? cachedUserActivities : [],
+    {
+      lastScanTime,
+      failedRepos: authenticated ? cachedFailedRepos : [],
+      isDev: isDevMode,
+      embedData: authenticated && enableEmbeddedReportData,
+      requiresClientAuth: !authenticated,
+    }
+  );
   res.setHeader('Content-Type', 'text/html');
   res.send(html);
 });
@@ -246,7 +389,7 @@ app.get('/', (req, res) => {
 /**
  * API: Server-Sent Events for Live Auto-Reload
  */
-app.get('/api/live-reload', (req, res) => {
+app.get('/api/live-reload', requireApiAuth, (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
@@ -261,10 +404,10 @@ app.get('/api/live-reload', (req, res) => {
 });
 
 /**
- * API: Trigger scan on-demand
+ * API: Trigger scan on-demand (Protected by API key authentication)
  */
-app.post('/api/scan', async (req, res) => {
-  logger.action('API Trigger', 'POST /api/scan requested by user');
+app.post('/api/scan', requireApiAuth, async (req, res) => {
+  logger.action('API Trigger', 'POST /api/scan requested by authenticated user');
   try {
     const data = await performScan();
     logger.success(`POST /api/scan finished: ${data.results.length} repos updated`);
@@ -276,9 +419,9 @@ app.post('/api/scan', async (req, res) => {
 });
 
 /**
- * API: Get current status and cached data
+ * API: Get current status and cached data (Protected by API key authentication)
  */
-app.get('/api/data', (req, res) => {
+app.get('/api/data', requireApiAuth, (req, res) => {
   res.json({
     isScanning,
     lastScanTime,
@@ -289,17 +432,17 @@ app.get('/api/data', (req, res) => {
 });
 
 /**
- * API: Get configured repositories
+ * API: Get configured repositories (Protected by API key authentication)
  */
-app.get('/api/repos', (req, res) => {
+app.get('/api/repos', requireApiAuth, (req, res) => {
   const config = loadConfig();
   res.json({ repositories: config.repositories || [] });
 });
 
 /**
- * API: Add a new repository and scan immediately
+ * API: Add a new repository and scan immediately (Protected by API key authentication)
  */
-app.post('/api/repos', async (req, res) => {
+app.post('/api/repos', requireApiAuth, async (req, res) => {
   if (isReadOnly) {
     logger.warn('POST /api/repos rejected: server is running in read-only mode (DASHBOARD_READONLY=true)');
     return res.status(403).json({
@@ -367,9 +510,9 @@ app.post('/api/repos', async (req, res) => {
 });
 
 /**
- * API: Remove a repository
+ * API: Remove a repository (Protected by API key authentication)
  */
-app.delete('/api/repos/:owner/:repo', async (req, res) => {
+app.delete('/api/repos/:owner/:repo', requireApiAuth, async (req, res) => {
   if (isReadOnly) {
     logger.warn('DELETE /api/repos rejected: server is running in read-only mode (DASHBOARD_READONLY=true)');
     return res.status(403).json({
@@ -416,6 +559,25 @@ app.listen(PORT, HOST, async () => {
   if (isReadOnly) {
     logger.info('Read-only mode enabled (DASHBOARD_READONLY=true): repository list modifications are locked.');
   }
+  if (hasConfiguredApiKey) {
+    logger.success(
+      `API Key authentication active for /api routes (DASHBOARD_API_KEY masked: ${maskToken(rawConfiguredApiKey)}).`
+    );
+  } else if (isApiKeyPlaceholder) {
+    logger.warn(
+      `DASHBOARD_API_KEY appears to be a placeholder (${maskToken(rawConfiguredApiKey)}). Generated ephemeral runtime key (<TOKEN>) to keep /api routes protected.`
+    );
+  } else {
+    logger.warn(
+      'DASHBOARD_API_KEY not set in environment. Generated ephemeral runtime key (<TOKEN>) to keep /api routes protected against unauthenticated access.'
+    );
+  }
+  if (isDashboardAuthRequired) {
+    logger.info('Dashboard root (/) authentication enabled (DASHBOARD_REQUIRE_AUTH=true).');
+  }
+  logger.info(
+    `Disk persistence: cache=${enableDiskCache ? 'ENABLED' : 'DISABLED (default)'}, reports=${enableDiskReports ? 'ENABLED' : 'DISABLED (default)'}`
+  );
   logger.info('Press Ctrl+C to stop.\n');
 
   if (!hasToken) {
@@ -433,7 +595,7 @@ app.listen(PORT, HOST, async () => {
 
   logPushProtectionStatus();
 
-  // Check if we have cached results for instant startup
+  // Check if we have cached results for instant startup (only when ENABLE_DISK_CACHE=true)
   const diskCache = loadCache();
   const config = loadConfig();
   const currentRepoKeys = (config.repositories || []).map((r) => `${r.owner}/${r.repo}`).sort();
@@ -446,11 +608,14 @@ app.listen(PORT, HOST, async () => {
     cachedFailedRepos = diskCache.failedRepos || [];
     lastScanTime = diskCache.lastScanTime || new Date().toISOString();
     logger.success(`⚡ Loaded cached scan data for ${cachedResults.length} repositories (instant startup)`);
-    saveHtmlReport(cachedResults, cachedUserActivities, {
-      lastScanTime,
-      failedRepos: cachedFailedRepos,
-      isDev: isDevMode,
-    });
+    if (enableDiskReports) {
+      saveHtmlReport(cachedResults, cachedUserActivities, {
+        lastScanTime,
+        failedRepos: cachedFailedRepos,
+        isDev: isDevMode,
+        embedData: enableEmbeddedReportData,
+      });
+    }
     broadcastReload('server-restarted');
   } else {
     // Perform initial scan
