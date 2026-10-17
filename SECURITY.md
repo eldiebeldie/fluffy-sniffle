@@ -20,23 +20,27 @@ This document details the security architecture of `fluffy-sniffle`, potential d
 
 Below are the potential data exposure vectors identified during security auditing and the hardening controls implemented to resolve them:
 
-### 1. Network Exposure of Web Server & API (`127.0.0.1` Loopback Binding)
-- **Risk:** Binding an unauthenticated Express server to `0.0.0.0` (all network interfaces) allows other devices on the same LAN/Wi-Fi to view `/api/data` (exposing private repository branch/PR metadata) or send `POST /api/repos` requests to probe private repositories using the server's `GITHUB_TOKEN`.
+### 1. Network Exposure & API Authentication (`127.0.0.1` Loopback Binding + `DASHBOARD_API_KEY`)
+- **Risk:** Binding an unauthenticated Express server to `0.0.0.0` or leaving `/api/data` and `/api/scan` open allows unauthorized local processes or LAN callers to read full scan datasets or trigger scans using the server's `GITHUB_TOKEN`.
 - **Mitigation Applied:**
-  - `src/server.js` now binds strictly to **`127.0.0.1` (`localhost`)** by default (`const HOST = process.env.HOST || '127.0.0.1'`).
-  - `docker-compose.yml` and `package.json` (`docker:run`) now map host ports strictly to loopback: `"127.0.0.1:3000:3000"`.
+  - `src/server.js` binds strictly to **`127.0.0.1` (`localhost`)** by default (`const HOST = process.env.HOST || '127.0.0.1'`).
+  - `docker-compose.yml` and `package.json` (`docker:run`) map host ports strictly to loopback: `"127.0.0.1:3000:3000"`.
+  - **Mandatory API Key Authentication (`/api/*`):** All `/api` endpoints (`GET /api/data`, `POST /api/scan`, `GET /api/repos`, `POST /api/repos`, `DELETE /api/repos/:owner/:repo`, `GET /api/live-reload`) are protected by `requireApiAuth` middleware (`DASHBOARD_API_KEY`). If `DASHBOARD_API_KEY` is not set in `.env`, an ephemeral random key is generated at startup so `/api` routes always reject unauthenticated callers with `401 Unauthorized`.
+  - **Optional Root Dashboard Authentication (`DASHBOARD_REQUIRE_AUTH=true`):** Setting `DASHBOARD_REQUIRE_AUTH=true` requires a valid API key to access `GET /`.
+  - **Zero Unauthenticated HTML/JS Data Embedding:** `generateHtmlReport()` in `src/htmlReporter.js` and `GET /` in `src/server.js` no longer embed the scanned dataset into unauthenticated HTML/JS responses (`DASHBOARD_DATA` defaults to `{"results":[],"userActivities":[]}` and is hydrated via authenticated `GET /api/data`).
   - **Optional Read-Only Mode (`DASHBOARD_READONLY=true`):** Setting `DASHBOARD_READONLY=true` in `.env` disables `POST /api/repos` and `DELETE /api/repos/:owner/:repo` so the tracked repository list cannot be modified at runtime via the web API.
 
-### 2. Token Redaction in Console & CI/CD Logs
-- **Risk:** Printing the last 4 characters of a Personal Access Token (e.g., `ghp_...abcd`) in terminal logs can leak partial token entropy if stdout is captured in shared or public CI/CD build logs.
+### 2. Token & Path Redaction in Console & CI/CD Logs
+- **Risk:** Printing partial token characters, certificate contents, or machine-specific paths in terminal logs can leak sensitive environment details if stdout is captured in shared or public CI/CD build logs.
 - **Mitigation Applied:**
-  - `maskToken()` in `src/github.js` now performs **full secret redaction**. It reveals only the recognized non-secret token type prefix (`ghp_`, `github_pat_`, `gho_`, `ghs_`, `ghr_`) followed by fixed asterisks (`ghp_****...****`), or `<REDACTED>` for custom tokens. Zero secret characters from the token body or suffix are ever printed.
+  - `maskToken()` in `src/github.js` performs **full secret redaction**, revealing only the recognized non-secret token type prefix followed by `<TOKEN>` (e.g. `ghp_<TOKEN>`), `<PLACEHOLDER>`, or `<NONE>`.
+  - Certificate paths and query parameters in logs are sanitized using `<CERT_PATH>` and `<TOKEN>` placeholders.
 
 ### 3. Man-in-the-Middle (MitM) Risk with Insecure TLS
 - **Risk:** Enabling `GITHUB_ALLOW_INSECURE_TLS=true` sets `rejectUnauthorized: false` and `NODE_TLS_REJECT_UNAUTHORIZED = '0'`. On an untrusted network, an active MitM attacker could spoof `api.github.com` and intercept the `Authorization` header containing `GITHUB_TOKEN`.
 - **Mitigation Applied:**
   - Strict TLS verification is enforced by default (`GITHUB_ALLOW_INSECURE_TLS=false`).
-  - First-class custom CA certificate bundle support (`GITHUB_CA_CERT_PATH`) is provided so enterprise users behind SSL inspection proxies can maintain full certificate chain verification without disabling TLS security.
+  - First-class custom CA certificate bundle support (`GITHUB_CA_CERT_PATH=<CERT_PATH>`) is applied across both `node:https` (`https.Agent`) and `fetch`/`undici` request paths so enterprise users behind SSL inspection proxies can maintain full certificate chain verification without disabling TLS security.
   - Prominent console warnings are emitted whenever `GITHUB_ALLOW_INSECURE_TLS=true` is used.
 
 ### 4. Shell Command Execution When Opening Browser
@@ -44,10 +48,11 @@ Below are the potential data exposure vectors identified during security auditin
 - **Mitigation Applied:**
   - `openInBrowser()` in `src/index.js` and `src/server.js` uses `execFile` with argument arrays rather than raw shell interpolation.
 
-### 5. Local Disk Persistence (`reports/` & `reports/.cache.json`)
-- **Risk:** Scanning private repositories writes branch names, PR titles, and contributor usernames into `reports/index.html`, `reports/repo-health-*.html`, `reports/repo-health-*.md`, and `reports/.cache.json`.
-- **Operational Guidance:**
-  - Do not publicly host or share generated files from `reports/` if your scan includes private internal repositories, as `reports/index.html` embeds the full scan dataset (`dashboardDataJson`) for client-side search and filtering.
+### 5. No-Disk Persistence by Default (`ENABLE_DISK_CACHE=false`, `ENABLE_DISK_REPORTS=false`)
+- **Risk:** Automatically writing `reports/index.html`, `reports/repo-health-*.html`, `reports/repo-health-*.md`, and `reports/.cache.json` to disk can leave sensitive private repository branch names, PR titles, and contributor usernames persisted on the local filesystem.
+- **Mitigation Applied:**
+  - Both disk cache (`saveCache` / `loadCache` in `src/server.js`) and disk report generation (`saveHtmlReport` in `src/htmlReporter.js`, `saveMarkdownReport` in `src/reporter.js`) are **disabled by default**.
+  - Disk persistence only occurs if explicitly enabled via `ENABLE_DISK_CACHE=true`, `ENABLE_DISK_REPORTS=true`, or `ENABLE_DISK_PERSISTENCE=true`.
 
 ### 6. Restricted-Environment Push & Write Safeguard (`ALLOW_GIT_PUSH=false` / `"allowGitPush": false`)
 - **Security Rationale:** When cloning open-source or internal auditing tools into restricted corporate workstations, bastion hosts, or regulated environments, engineers frequently modify `config.json` (e.g., adding private organization repository names) or local scripts. Without an explicit outbound push lock, an accidental `git push` or automated script could inadvertently publish internal repository identifiers or local environment customizations to an upstream remote.
@@ -67,8 +72,10 @@ Below are the potential data exposure vectors identified during security auditin
 
 1. **Use Fine-Grained Personal Access Tokens (PATs):**
    - Prefer GitHub **Fine-Grained PATs** over Classic PATs (`repo` scope).
-   - Scope the token strictly to the specific repositories you intend to audit, with **Read-only** permissions for `Contents`, `Metadata`, and `Pull requests`.
-2. **Use `GITHUB_CA_CERT_PATH` Instead of `GITHUB_ALLOW_INSECURE_TLS`:**
-   - In corporate proxy environments, always configure `GITHUB_CA_CERT_PATH=/path/to/corporate-ca.pem` rather than leaving `GITHUB_ALLOW_INSECURE_TLS=true` enabled.
-3. **Keep `HOST=127.0.0.1` and `ALLOW_GIT_PUSH=false` in Restricted Environments:**
+   - Scope the token strictly to the specific `<OWNER/REPO>` repositories you intend to audit, with **Read-only** permissions for `Contents`, `Metadata`, and `Pull requests`.
+2. **Configure a Strong `DASHBOARD_API_KEY`:**
+   - Set `DASHBOARD_API_KEY=<API_KEY>` in `.env` and set `DASHBOARD_REQUIRE_AUTH=true` if you want the root `/` route gated alongside `/api/*`.
+3. **Use `GITHUB_CA_CERT_PATH` Instead of `GITHUB_ALLOW_INSECURE_TLS`:**
+   - In corporate proxy environments, always configure `GITHUB_CA_CERT_PATH=<CERT_PATH>` rather than leaving `GITHUB_ALLOW_INSECURE_TLS=true` enabled.
+4. **Keep `HOST=127.0.0.1` and `ALLOW_GIT_PUSH=false` in Restricted Environments:**
    - Leave `ALLOW_GIT_PUSH=false` (`"allowGitPush": false`) enabled during all routine auditing in restricted or corporate environments, and only toggle it to `true` when intentionally publishing vetted code changes upstream.
