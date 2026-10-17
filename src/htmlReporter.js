@@ -1983,28 +1983,62 @@ export function generateHtmlReport(results = [], userActivities = [], metadata =
       }, 4000);
     }
 
-    // Hydrate DASHBOARD_DATA from authenticated /api/data endpoint
+    // Hydrate DASHBOARD_DATA and dashboard DOM views from authenticated endpoints
     async function loadDashboardDataFromApi() {
       if (window.location.protocol === 'file:') return;
       const key = getApiKey();
       if (!key) return;
       try {
-        const res = await fetch('/api/data', {
-          method: 'GET',
-          headers: getAuthHeaders(),
-          cache: 'no-store'
-        });
-        if (!res.ok) {
-          if (res.status === 401 || res.status === 403) {
-            showToast('🔒 Invalid or missing API key for /api/data', 'error');
+        const [dataRes, htmlRes] = await Promise.all([
+          fetch('/api/data', {
+            method: 'GET',
+            headers: getAuthHeaders(),
+            cache: 'no-store'
+          }),
+          fetch('/', {
+            method: 'GET',
+            headers: getAuthHeaders(),
+            cache: 'no-store'
+          })
+        ]);
+
+        if (!dataRes.ok) {
+          if (dataRes.status === 401 || dataRes.status === 403) {
+            showToast('🔒 Invalid or missing API key. Ensure it matches DASHBOARD_API_KEY in .env', 'error');
           }
           return;
         }
-        const data = await res.json();
+
+        const data = await dataRes.json();
         DASHBOARD_DATA = {
           results: Array.isArray(data.results) ? data.results : [],
           userActivities: Array.isArray(data.userActivities) ? data.userActivities : []
         };
+
+        if (htmlRes.ok) {
+          const htmlText = await htmlRes.text();
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(htmlText, 'text/html');
+
+          const newViewRepos = doc.getElementById('viewRepos');
+          const curViewRepos = document.getElementById('viewRepos');
+          if (newViewRepos && curViewRepos) {
+            curViewRepos.innerHTML = newViewRepos.innerHTML;
+          }
+
+          const newViewUsers = doc.getElementById('viewUsers');
+          const curViewUsers = document.getElementById('viewUsers');
+          if (newViewUsers && curViewUsers) {
+            curViewUsers.innerHTML = newViewUsers.innerHTML;
+          }
+
+          const newLastScanned = doc.getElementById('lastScannedText');
+          const curLastScanned = document.getElementById('lastScannedText');
+          if (newLastScanned && curLastScanned) {
+            curLastScanned.innerHTML = newLastScanned.innerHTML;
+          }
+        }
+
         const banner = document.getElementById('authNoticeBanner');
         if (banner) banner.style.display = 'none';
         const badgeRepos = document.getElementById('badgeTotalRepos');
