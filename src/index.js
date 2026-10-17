@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import chalk from 'chalk';
 import {
   getRepositoryHealthData,
@@ -18,14 +18,14 @@ import { logger } from './logger.js';
 function openInBrowser(filePath) {
   logger.action('Open Browser', filePath);
   const fullPath = path.resolve(filePath);
-  const startCmd =
+  const [cmd, args] =
     process.platform === 'win32'
-      ? `start "" "${fullPath}"`
+      ? ['cmd.exe', ['/c', 'start', '', fullPath]]
       : process.platform === 'darwin'
-      ? `open "${fullPath}"`
-      : `xdg-open "${fullPath}"`;
+      ? ['open', [fullPath]]
+      : ['xdg-open', [fullPath]];
 
-  exec(startCmd, (err) => {
+  execFile(cmd, args, (err) => {
     if (err) {
       logger.warn(`Could not launch browser: ${err.message}`);
     }

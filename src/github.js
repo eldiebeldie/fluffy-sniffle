@@ -7,13 +7,20 @@ import { logger } from './logger.js';
 dotenv.config();
 
 /**
- * Safely masks a token for logging (e.g. ghp_****...abcd)
+ * Safely masks a token for logging without exposing any secret characters (e.g. ghp_****...****)
  */
 export function maskToken(rawToken) {
   if (!rawToken || typeof rawToken !== 'string') return '<NONE>';
   const trimmed = rawToken.trim();
-  if (trimmed.length <= 8) return '****';
-  return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
+  if (!trimmed) return '<NONE>';
+  if (isPlaceholderToken(trimmed)) return '<PLACEHOLDER>';
+  const knownPrefixes = ['github_pat_', 'ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_'];
+  for (const prefix of knownPrefixes) {
+    if (trimmed.startsWith(prefix)) {
+      return `${prefix}****...****`;
+    }
+  }
+  return '****...****';
 }
 
 /**

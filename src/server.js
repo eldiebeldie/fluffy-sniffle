@@ -1,7 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import chalk from 'chalk';
 import dotenv from 'dotenv';
 import {
@@ -19,7 +19,10 @@ import { logger } from './logger.js';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
+const HOST = process.env.HOST || '127.0.0.1';
+const isReadOnly =
+  process.env.DASHBOARD_READONLY === 'true' || process.env.DASHBOARD_READONLY === '1';
 const configPath = path.resolve(process.cwd(), 'config.json');
 
 const isDevMode = process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
@@ -56,14 +59,14 @@ app.use((req, res, next) => {
 
 function openInBrowser(url) {
   logger.action('Open Browser', url);
-  const startCmd =
+  const [cmd, args] =
     process.platform === 'win32'
-      ? `start "" "${url}"`
+      ? ['cmd.exe', ['/c', 'start', '', url]]
       : process.platform === 'darwin'
-      ? `open "${url}"`
-      : `xdg-open "${url}"`;
+      ? ['open', [url]]
+      : ['xdg-open', [url]];
 
-  exec(startCmd, (err) => {
+  execFile(cmd, args, (err) => {
     if (err) {
       logger.warn(`Could not automatically launch browser: ${err.message}`);
     }
@@ -296,6 +299,13 @@ app.get('/api/repos', (req, res) => {
  * API: Add a new repository and scan immediately
  */
 app.post('/api/repos', async (req, res) => {
+  if (isReadOnly) {
+    logger.warn('POST /api/repos rejected: server is running in read-only mode (DASHBOARD_READONLY=true)');
+    return res.status(403).json({
+      success: false,
+      error: 'Repository modifications are disabled in read-only mode (DASHBOARD_READONLY=true).',
+    });
+  }
   try {
     let { owner, repo, repoStr } = req.body;
     let parsed;
@@ -359,6 +369,13 @@ app.post('/api/repos', async (req, res) => {
  * API: Remove a repository
  */
 app.delete('/api/repos/:owner/:repo', async (req, res) => {
+  if (isReadOnly) {
+    logger.warn('DELETE /api/repos rejected: server is running in read-only mode (DASHBOARD_READONLY=true)');
+    return res.status(403).json({
+      success: false,
+      error: 'Repository modifications are disabled in read-only mode (DASHBOARD_READONLY=true).',
+    });
+  }
   try {
     const { owner, repo } = req.params;
     const repoUrl = `https://github.com/${owner}/${repo}`;
@@ -386,14 +403,18 @@ app.delete('/api/repos/:owner/:repo', async (req, res) => {
 // ----------------------------------------------------
 // Start Server
 // ----------------------------------------------------
-app.listen(PORT, async () => {
-  const url = `http://localhost:${PORT}`;
+app.listen(PORT, HOST, async () => {
+  const displayHost = HOST === '0.0.0.0' ? 'localhost' : HOST;
+  const url = `http://${displayHost}:${PORT}`;
   if (isDevMode) {
     console.log(chalk.bold.cyan('\n⚡ DEV SERVER Active with Instant Live Auto-Reload!'));
   } else {
     console.log(chalk.bold.magenta('\n🚀 GitHub Health Dashboard Server is running!'));
   }
-  logger.success(`Server active at ${chalk.underline(url)}`);
+  logger.success(`Server active at ${chalk.underline(url)} (bound to ${HOST}:${PORT})`);
+  if (isReadOnly) {
+    logger.info('Read-only mode enabled (DASHBOARD_READONLY=true): repository list modifications are locked.');
+  }
   logger.info('Press Ctrl+C to stop.\n');
 
   if (!hasToken) {

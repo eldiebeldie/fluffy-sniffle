@@ -173,7 +173,7 @@ stateDiagram-v2
   - 👁️ **High Contrast (Section 508 / WCAG AAA):** Pure black (`#000000`) canvas, pure white (`#ffffff`) text, high-visibility borders ($\ge 7:1$ contrast ratio).
   - **Section 508 Features:** Skip-to-content navigation links, visible focus indicator rings (`:focus-visible`), dual visual indicators (icons + text labels so information doesn't rely solely on color), semantic table headers (`scope="col"`), screen-reader labels (`.sr-only`), and `localStorage` persistence.
 - **🔒 Enterprise TLS & Custom CA Integration:** Built-in custom CA certificate bundle support (`GITHUB_CA_CERT_PATH` / `NODE_EXTRA_CA_CERTS`) and diagnostic insecure TLS toggle (`GITHUB_ALLOW_INSECURE_TLS`). Ensures reliable operation behind corporate proxies, custom PKI infrastructures, and enterprise firewall gateways across both Node HTTPS and fetch/undici HTTP transports.
-- **🛡️ Masked Credential Logging & Placeholder Detection:** Startup credential inspection with strict token masking (`ghp_****...abcd`), proactive warnings for unconfigured placeholder values (`your_github_pat_token_here`), and explicit owner/repo GitHub URLs (`https://github.com/owner/repo`) on all fetch, scan, success, and error logs.
+- **🛡️ Masked Credential Logging, Loopback Isolation & Placeholder Detection:** Startup credential inspection with full secret redaction (`ghp_****...****`), `127.0.0.1` loopback-by-default server binding, optional `DASHBOARD_READONLY` lock mode, proactive warnings for unconfigured placeholder values (`your_github_pat_token_here`), and explicit owner/repo GitHub URLs (`https://github.com/owner/repo`) on all fetch, scan, success, and error logs. See [`SECURITY.md`](SECURITY.md).
 - **📝 Comprehensive Activity Logging:** Colorized console logging with precise millisecond timestamps, action tags, and HTTP request tracking.
 
 ---
@@ -193,10 +193,15 @@ Copy the environment template:
 cp .env.example .env
 ```
 
-Configure your credentials and TLS options in `.env`:
+Configure your credentials, security binding, and TLS options in `.env`:
 ```env
 # GitHub Personal Access Token (Classic with repo scope, or Fine-grained with PR/Contents Read)
 GITHUB_TOKEN=ghp_your_token_here
+
+# Server Network & Security Configuration (defaults to localhost-only)
+HOST=127.0.0.1
+PORT=3000
+DASHBOARD_READONLY=false
 
 # Optional: Custom CA certificate bundle (e.g. corporate proxy or private root CA)
 # GITHUB_CA_CERT_PATH=C:/certs/corporate-root-ca.pem
@@ -311,8 +316,9 @@ The built-in Express server exposes a clean REST API:
 
 ```
 fluffy-sniffle/
-├── .env.example          # Environment token template
-├── .gitignore            # Ignores node_modules, .env, and reports
+├── .env.example          # Environment token & security template
+├── .gitignore            # Ignores node_modules, .env, certs, and reports
+├── SECURITY.md           # Dedicated security & data privacy audit guide
 ├── config.json           # Tracked repositories and staleness thresholds
 ├── package.json          # Dependencies, scripts, and author metadata
 ├── reports/              # Generated HTML dashboards & Markdown reports
@@ -329,7 +335,9 @@ fluffy-sniffle/
 
 ---
 
-## 🔐 Enterprise TLS, Custom CA & Proxy Troubleshooting
+## 🔐 Enterprise TLS, Custom CA & Security Hardening
+
+> 📄 **For a complete breakdown of data privacy protections, mitigated leak vectors, and operational hardening, see [`SECURITY.md`](SECURITY.md).**
 
 In enterprise environments with SSL/TLS inspection proxies (e.g., corporate firewalls, Zscaler, Netskope, or internal PKI gateways), outbound requests to GitHub APIs may encounter certificate trust failures:
 ```
@@ -353,9 +361,11 @@ GITHUB_ALLOW_INSECURE_TLS=true
 > [!WARNING]
 > Insecure TLS mode bypasses server certificate verification (`NODE_TLS_REJECT_UNAUTHORIZED='0'`). Use exclusively for local troubleshooting. It must **never** be enabled in production environments.
 
-### 3. Credential Safety & Logging
-- **Masked Token Output:** Token presence is logged only in masked format (`ghp_****...abcd`). Plaintext secrets are never emitted to logs or stdout.
-- **Placeholder Detection:** If `.env` contains template defaults (e.g., `your_github_pat_token_here`), a descriptive warning is logged and the application safely falls back to the unauthenticated public REST API.
+### 3. Credential Safety, Network Isolation & Logging
+- **Full Secret Redaction:** Token presence is logged strictly with non-secret prefix masking (`ghp_****...****`) — zero secret suffix characters or plaintext tokens are ever emitted to logs or stdout.
+- **Localhost Loopback Binding (`127.0.0.1`):** Both the Express server (`HOST=127.0.0.1`) and Docker port mappings (`127.0.0.1:3000:3000`) bind to loopback by default so other devices on the local network cannot access `/api/data` or probe `/api/repos`.
+- **Optional Read-Only Mode (`DASHBOARD_READONLY=true`):** Locks `POST /api/repos` and `DELETE /api/repos/:owner/:repo` to prevent runtime modifications to tracked repositories.
+- **Placeholder Detection:** If `.env` contains template defaults (e.g., `your_github_pat_token_here`), a descriptive warning is logged (`<PLACEHOLDER>`) and the application safely falls back to the unauthenticated public REST API.
 - **Clear Repository Logging:** Every fetch, scan, success, and error message outputs the full GitHub URL (`https://github.com/<owner>/<repo>`) for immediate traceability.
 
 ---

@@ -14,8 +14,9 @@ RUN apk --no-cache add ca-certificates
 # Create application directory
 WORKDIR /app
 
-# Set default production environment
+# Set default production environment (container listens on 0.0.0.0; host port mapping restricts access to 127.0.0.1)
 ENV NODE_ENV=production \
+    HOST=0.0.0.0 \
     PORT=3000
 
 # Copy dependency manifests first for optimal layer caching
@@ -28,7 +29,7 @@ RUN npm ci --omit=dev --ignore-scripts && \
 # Copy application source code and configuration
 COPY src/ ./src/
 COPY config.json ./
-COPY README.md ./
+COPY README.md SECURITY.md ./
 
 # Create reports directory and set proper permissions for non-root user
 RUN mkdir -p reports && \

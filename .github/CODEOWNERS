@@ -10,6 +10,7 @@
 /package.json @EldieBeldie
 /package-lock.json @EldieBeldie
 /README.md @EldieBeldie
+/SECURITY.md @EldieBeldie
 /.github/ @EldieBeldie
 
 # Configuration, environment, and containers
