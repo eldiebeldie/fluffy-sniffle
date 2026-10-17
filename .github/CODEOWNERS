@@ -8,5 +8,13 @@
 /src/ @EldieBeldie
 /config.json @EldieBeldie
 /package.json @EldieBeldie
+/package-lock.json @EldieBeldie
 /README.md @EldieBeldie
 /.github/ @EldieBeldie
+
+# Configuration, environment, and containers
+/.env.example @EldieBeldie
+/.gitignore @EldieBeldie
+/.dockerignore @EldieBeldie
+/Dockerfile @EldieBeldie
+/docker-compose.yml @EldieBeldie

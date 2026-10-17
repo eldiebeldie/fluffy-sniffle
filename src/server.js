@@ -4,7 +4,14 @@ import path from 'path';
 import { exec } from 'child_process';
 import chalk from 'chalk';
 import dotenv from 'dotenv';
-import { getRepositoryHealthData, parseRepoString, hasToken } from './github.js';
+import {
+  getRepositoryHealthData,
+  parseRepoString,
+  hasToken,
+  token,
+  maskToken,
+  isPlaceholder,
+} from './github.js';
 import { analyzeRepository, aggregateUserActivities } from './analyzer.js';
 import { generateHtmlReport, saveHtmlReport } from './htmlReporter.js';
 import { logger } from './logger.js';
@@ -159,7 +166,8 @@ async function performScan(customRepos = null) {
     const results = [];
     const failedRepos = [];
     for (const { owner, repo } of reposToScan) {
-      logger.info(`Starting scan for ${owner}/${repo}...`);
+      const repoUrl = `https://github.com/${owner}/${repo}`;
+      logger.info(`Starting scan for ${owner}/${repo} (${repoUrl})...`);
       try {
         const rawData = await getRepositoryHealthData(owner, repo);
         const analyzed = analyzeRepository(rawData, {
@@ -168,8 +176,8 @@ async function performScan(customRepos = null) {
         });
         results.push(analyzed);
       } catch (err) {
-        logger.error(`Failed to scan ${owner}/${repo}: ${err.message}`);
-        failedRepos.push({ owner, repo, error: err.message });
+        logger.error(`Failed to scan ${owner}/${repo} (${repoUrl}): ${err.message}`);
+        failedRepos.push({ owner, repo, error: err.message, url: repoUrl });
       }
     }
 
@@ -309,16 +317,17 @@ app.post('/api/repos', async (req, res) => {
     owner = parsed.owner;
     repo = parsed.repo;
 
-    logger.action('Add Repository', `Verifying ${owner}/${repo} on GitHub...`);
+    const repoUrl = `https://github.com/${owner}/${repo}`;
+    logger.action('Add Repository', `Verifying ${owner}/${repo} (${repoUrl}) on GitHub...`);
 
     // Verify repository exists and is accessible on GitHub BEFORE saving to config.json
     try {
       await getRepositoryHealthData(owner, repo);
     } catch (fetchErr) {
-      logger.error(`Validation failed for ${owner}/${repo}: ${fetchErr.message}`);
+      logger.error(`Validation failed for ${owner}/${repo} (${repoUrl}): ${fetchErr.message}`);
       return res.status(404).json({
         success: false,
-        error: `Repository "${owner}/${repo}" could not be found or accessed on GitHub: ${fetchErr.message}`,
+        error: `Repository "${owner}/${repo}" (${repoUrl}) could not be found or accessed on GitHub: ${fetchErr.message}`,
       });
     }
 
@@ -332,9 +341,9 @@ app.post('/api/repos', async (req, res) => {
     if (!exists) {
       config.repositories.push({ owner, repo });
       saveConfig(config);
-      logger.success(`Added verified repository ${owner}/${repo} to config.json`);
+      logger.success(`Added verified repository ${owner}/${repo} (${repoUrl}) to config.json`);
     } else {
-      logger.info(`Repository ${owner}/${repo} is already in config.json`);
+      logger.info(`Repository ${owner}/${repo} (${repoUrl}) is already in config.json`);
     }
 
     // Trigger scan with newly added repo
@@ -352,7 +361,8 @@ app.post('/api/repos', async (req, res) => {
 app.delete('/api/repos/:owner/:repo', async (req, res) => {
   try {
     const { owner, repo } = req.params;
-    logger.action('Remove Repository', `${owner}/${repo}`);
+    const repoUrl = `https://github.com/${owner}/${repo}`;
+    logger.action('Remove Repository', `${owner}/${repo} (${repoUrl})`);
     const config = loadConfig();
     const originalLength = (config.repositories || []).length;
     config.repositories = (config.repositories || []).filter(
@@ -360,9 +370,9 @@ app.delete('/api/repos/:owner/:repo', async (req, res) => {
     );
     if (config.repositories.length !== originalLength) {
       saveConfig(config);
-      logger.success(`Removed repository ${owner}/${repo} from config.json`);
+      logger.success(`Removed repository ${owner}/${repo} (${repoUrl}) from config.json`);
     } else {
-      logger.warn(`Repository ${owner}/${repo} was not in config.json`);
+      logger.warn(`Repository ${owner}/${repo} (${repoUrl}) was not in config.json`);
     }
 
     const scanData = await performScan();
@@ -387,8 +397,16 @@ app.listen(PORT, async () => {
   logger.info('Press Ctrl+C to stop.\n');
 
   if (!hasToken) {
-    logger.warn('GITHUB_TOKEN not detected in .env. Running with unauthenticated GitHub REST API.');
+    if (isPlaceholder) {
+      logger.warn(
+        `GITHUB_TOKEN appears to be a placeholder value ("${maskToken(token)}"). Running with unauthenticated GitHub REST API.`
+      );
+    } else {
+      logger.warn('GITHUB_TOKEN not detected in .env. Running with unauthenticated GitHub REST API.');
+    }
     logger.info('Add GITHUB_TOKEN to .env for 5,000 req/hr rate limits and fast GraphQL queries.\n');
+  } else {
+    logger.success(`GitHub Token detected (masked: ${maskToken(token)}). Using authenticated GraphQL API.\n`);
   }
 
   // Check if we have cached results for instant startup

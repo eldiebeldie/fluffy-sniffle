@@ -1,23 +1,107 @@
 import { Octokit } from '@octokit/rest';
 import dotenv from 'dotenv';
+import https from 'node:https';
+import fs from 'node:fs';
 import { logger } from './logger.js';
 
 dotenv.config();
 
-const token = process.env.GITHUB_TOKEN;
+/**
+ * Safely masks a token for logging (e.g. ghp_****...abcd)
+ */
+export function maskToken(rawToken) {
+  if (!rawToken || typeof rawToken !== 'string') return '<NONE>';
+  const trimmed = rawToken.trim();
+  if (trimmed.length <= 8) return '****';
+  return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
+}
 
-export const octokit = new Octokit({
-  auth: token || undefined,
+/**
+ * Checks if token is an unconfigured placeholder
+ */
+export function isPlaceholderToken(rawToken) {
+  if (!rawToken || typeof rawToken !== 'string') return false;
+  const trimmed = rawToken.trim().toLowerCase();
+  return (
+    trimmed === 'your_github_pat_token_here' ||
+    trimmed === 'your_token_here' ||
+    trimmed === 'ghp_your_token_here' ||
+    trimmed === 'token' ||
+    trimmed === 'ghp_xxx' ||
+    (trimmed.startsWith('<') && trimmed.endsWith('>')) ||
+    (trimmed.startsWith('${') && trimmed.endsWith('}'))
+  );
+}
+
+// Resolve token, supporting environment variable expansion like ${VAR_NAME}
+let resolvedToken = process.env.GITHUB_TOKEN;
+if (resolvedToken && resolvedToken.startsWith('${') && resolvedToken.endsWith('}')) {
+  const refVar = resolvedToken.slice(2, -1);
+  if (process.env[refVar]) {
+    resolvedToken = process.env[refVar];
+  }
+}
+
+export const token = resolvedToken;
+export const isPlaceholder = isPlaceholderToken(token);
+export const hasToken = Boolean(token && !isPlaceholder);
+
+// ----------------------------------------------------
+// TLS & Certificate Configuration
+// ----------------------------------------------------
+const caCertPath = process.env.GITHUB_CA_CERT_PATH || process.env.NODE_EXTRA_CA_CERTS;
+const allowInsecureTls =
+  process.env.GITHUB_ALLOW_INSECURE_TLS === 'true' ||
+  process.env.GITHUB_ALLOW_INSECURE_TLS === '1' ||
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0';
+
+let caBundle = undefined;
+if (caCertPath) {
+  if (fs.existsSync(caCertPath)) {
+    try {
+      caBundle = fs.readFileSync(caCertPath);
+      process.env.NODE_EXTRA_CA_CERTS = caCertPath;
+      logger.info(`Loaded custom CA certificate bundle from: ${caCertPath}`);
+    } catch (err) {
+      logger.error(`Failed to read custom CA certificate file at ${caCertPath}: ${err.message}`);
+    }
+  } else {
+    logger.warn(`Configured GITHUB_CA_CERT_PATH file not found: ${caCertPath}`);
+  }
+}
+
+if (allowInsecureTls) {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  logger.warn('INSECURE TLS MODE ENABLED: Certificate verification is disabled. Use for local troubleshooting only!');
+}
+
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: !allowInsecureTls,
+  ...(caBundle ? { ca: caBundle } : {}),
 });
 
-export const hasToken = Boolean(token);
+const customFetch = (url, options = {}) => {
+  return fetch(url, {
+    ...options,
+    agent: httpsAgent,
+  });
+};
+
+export const octokit = new Octokit({
+  auth: hasToken ? token : undefined,
+  request: {
+    agent: httpsAgent,
+    fetch: customFetch,
+  },
+});
 
 /**
  * Fetch branches and PRs using GraphQL (requires GITHUB_TOKEN)
  */
 async function fetchViaGraphQL(owner, repo) {
+  const repoUrl = `https://github.com/${owner}/${repo}`;
   const fetchStart = Date.now();
-  logger.info(`Fetching ${owner}/${repo} via GitHub GraphQL API...`);
+  logger.info(`Fetching ${owner}/${repo} (${repoUrl}) via GitHub GraphQL API...`);
 
   const query = `
     query GetRepoHealth($owner: String!, $repo: String!) {
@@ -82,8 +166,8 @@ async function fetchViaGraphQL(owner, repo) {
   const repoData = response.repository;
 
   if (!repoData) {
-    logger.error(`Repository ${owner}/${repo} not found on GitHub after ${durationMs}ms.`);
-    throw new Error(`Repository ${owner}/${repo} not found.`);
+    logger.error(`Repository ${owner}/${repo} (${repoUrl}) not found on GitHub after ${durationMs}ms.`);
+    throw new Error(`Repository ${owner}/${repo} (${repoUrl}) not found.`);
   }
 
   const defaultBranch = repoData.defaultBranchRef?.name || 'main';
@@ -116,7 +200,7 @@ async function fetchViaGraphQL(owner, repo) {
   const openPrsCount = repoData.openPullRequests?.totalCount ?? pullRequests.filter((p) => p.state === 'OPEN').length;
 
   logger.info(
-    `[${owner}/${repo}] GraphQL fetch complete in ${durationMs}ms: ${branches.length} branches, ${pullRequests.length} PRs (${openPrsCount} open, default branch: ${defaultBranch})`
+    `[${owner}/${repo}] (${repoUrl}) GraphQL fetch complete in ${durationMs}ms: ${branches.length} branches, ${pullRequests.length} PRs (${openPrsCount} open, default branch: ${defaultBranch})`
   );
 
   return {
@@ -135,8 +219,9 @@ async function fetchViaGraphQL(owner, repo) {
  * Fallback: Fetch branches and PRs using REST API (works unauthenticated for public repos)
  */
 async function fetchViaRest(owner, repo) {
+  const repoUrl = `https://github.com/${owner}/${repo}`;
   const fetchStart = Date.now();
-  logger.info(`Fetching ${owner}/${repo} via GitHub REST API (unauthenticated fallback)...`);
+  logger.info(`Fetching ${owner}/${repo} (${repoUrl}) via GitHub REST API (unauthenticated fallback)...`);
 
   // 1. Get repository metadata
   const { data: repoData } = await octokit.rest.repos.get({ owner, repo });
@@ -211,7 +296,7 @@ async function fetchViaRest(owner, repo) {
   const durationMs = Date.now() - fetchStart;
 
   logger.info(
-    `[${owner}/${repo}] REST fetch complete in ${durationMs}ms: ${branches.length} branches, ${pullRequests.length} PRs (${openPrsCount} open, default branch: ${defaultBranch})`
+    `[${owner}/${repo}] (${repoUrl}) REST fetch complete in ${durationMs}ms: ${branches.length} branches, ${pullRequests.length} PRs (${openPrsCount} open, default branch: ${defaultBranch})`
   );
 
   return {
@@ -230,9 +315,10 @@ async function fetchViaRest(owner, repo) {
  * Main export to get repository data
  */
 export async function getRepositoryHealthData(owner, repo) {
+  const repoUrl = `https://github.com/${owner}/${repo}`;
   const startTime = Date.now();
   const apiType = hasToken ? 'GraphQL API' : 'REST API';
-  logger.action('Fetch Repository', `${owner}/${repo} using ${apiType}`);
+  logger.action('Fetch Repository', `${owner}/${repo} (${repoUrl}) using ${apiType}`);
   try {
     let result;
     if (hasToken) {
@@ -241,11 +327,11 @@ export async function getRepositoryHealthData(owner, repo) {
       result = await fetchViaRest(owner, repo);
     }
     const durationMs = Date.now() - startTime;
-    logger.success(`Fetched repository ${owner}/${repo} (${apiType}) in ${durationMs}ms`);
+    logger.success(`Fetched repository ${owner}/${repo} (${repoUrl}) (${apiType}) in ${durationMs}ms`);
     return result;
   } catch (err) {
     const durationMs = Date.now() - startTime;
-    logger.error(`Failed to fetch repository ${owner}/${repo} after ${durationMs}ms: ${err.message}`);
+    logger.error(`Failed to fetch repository ${owner}/${repo} (${repoUrl}) after ${durationMs}ms: ${err.message}`);
     throw err;
   }
 }
@@ -285,4 +371,3 @@ export function parseRepoString(input) {
 
   return { owner, repo };
 }
-

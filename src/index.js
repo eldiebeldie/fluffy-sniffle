@@ -2,7 +2,14 @@ import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 import chalk from 'chalk';
-import { getRepositoryHealthData, parseRepoString, hasToken } from './github.js';
+import {
+  getRepositoryHealthData,
+  parseRepoString,
+  hasToken,
+  token,
+  maskToken,
+  isPlaceholder,
+} from './github.js';
 import { analyzeRepository, aggregateUserActivities } from './analyzer.js';
 import { printOverviewTable, printDetailedRepo, printUserOverviewTable, saveMarkdownReport } from './reporter.js';
 import { saveHtmlReport } from './htmlReporter.js';
@@ -29,10 +36,16 @@ async function main() {
   console.log(chalk.bold.magenta('\n🔍 GitHub Stale Branches & PR Status Checker'));
 
   if (!hasToken) {
-    logger.warn('GITHUB_TOKEN not found in environment. Running with unauthenticated REST API.');
+    if (isPlaceholder) {
+      logger.warn(
+        `GITHUB_TOKEN appears to be a placeholder value ("${maskToken(token)}"). Running with unauthenticated REST API fallback.`
+      );
+    } else {
+      logger.warn('GITHUB_TOKEN not found in environment. Running with unauthenticated REST API.');
+    }
     logger.info('To increase rate limits and use fast GraphQL queries, add GITHUB_TOKEN to .env\n');
   } else {
-    logger.success('GitHub Token detected. Using authenticated GraphQL API.\n');
+    logger.success(`GitHub Token detected (masked: ${maskToken(token)}). Using authenticated GraphQL API.\n`);
   }
 
   // Read config
@@ -82,16 +95,18 @@ async function main() {
   const results = [];
 
   for (const { owner, repo } of reposToScan) {
+    const repoUrl = `https://github.com/${owner}/${repo}`;
     try {
+      logger.info(`Starting scan for ${owner}/${repo} (${repoUrl})...`);
       const rawData = await getRepositoryHealthData(owner, repo);
       const analyzed = analyzeRepository(rawData, {
         staleDaysThreshold: config.defaultStaleDays || 30,
         warnStaleDays: config.warnStaleDays || 60,
       });
       results.push(analyzed);
-      logger.success(`Processed repository ${owner}/${repo}`);
+      logger.success(`Processed repository ${owner}/${repo} (${repoUrl})`);
     } catch (err) {
-      logger.error(`Failed processing ${owner}/${repo}: ${err.message}`);
+      logger.error(`Failed processing ${owner}/${repo} (${repoUrl}): ${err.message}`);
     }
   }
 

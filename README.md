@@ -172,6 +172,8 @@ stateDiagram-v2
   - 🌌 **Midnight:** Oceanic navy palette with vivid cyan and sapphire accents.
   - 👁️ **High Contrast (Section 508 / WCAG AAA):** Pure black (`#000000`) canvas, pure white (`#ffffff`) text, high-visibility borders ($\ge 7:1$ contrast ratio).
   - **Section 508 Features:** Skip-to-content navigation links, visible focus indicator rings (`:focus-visible`), dual visual indicators (icons + text labels so information doesn't rely solely on color), semantic table headers (`scope="col"`), screen-reader labels (`.sr-only`), and `localStorage` persistence.
+- **🔒 Enterprise TLS & Custom CA Integration:** Built-in custom CA certificate bundle support (`GITHUB_CA_CERT_PATH` / `NODE_EXTRA_CA_CERTS`) and diagnostic insecure TLS toggle (`GITHUB_ALLOW_INSECURE_TLS`). Ensures reliable operation behind corporate proxies, custom PKI infrastructures, and enterprise firewall gateways across both Node HTTPS and fetch/undici HTTP transports.
+- **🛡️ Masked Credential Logging & Placeholder Detection:** Startup credential inspection with strict token masking (`ghp_****...abcd`), proactive warnings for unconfigured placeholder values (`your_github_pat_token_here`), and explicit owner/repo GitHub URLs (`https://github.com/owner/repo`) on all fetch, scan, success, and error logs.
 - **📝 Comprehensive Activity Logging:** Colorized console logging with precise millisecond timestamps, action tags, and HTTP request tracking.
 
 ---
@@ -185,16 +187,23 @@ cd fluffy-sniffle
 npm install
 ```
 
-### 2. Configure GitHub Token (Recommended)
+### 2. Configure Environment (`.env`)
 Copy the environment template:
 ```bash
 cp .env.example .env
 ```
-Add your GitHub Personal Access Token to `.env`:
+
+Configure your credentials and TLS options in `.env`:
 ```env
+# GitHub Personal Access Token (Classic with repo scope, or Fine-grained with PR/Contents Read)
 GITHUB_TOKEN=ghp_your_token_here
+
+# Optional: Custom CA certificate bundle (e.g. corporate proxy or private root CA)
+# GITHUB_CA_CERT_PATH=C:/certs/corporate-root-ca.pem
+
+# Optional: Insecure TLS mode for local troubleshooting only (default: false)
+GITHUB_ALLOW_INSECURE_TLS=false
 ```
-*(Classic token with `repo` scope, or Fine-grained token with `Pull requests: Read` & `Contents: Read`).*
 
 ---
 
@@ -317,6 +326,37 @@ fluffy-sniffle/
     ├── reporter.js       # Terminal tables & Markdown export formatter
     └── server.js         # Express web server with live in-page triggers
 ```
+
+---
+
+## 🔐 Enterprise TLS, Custom CA & Proxy Troubleshooting
+
+In enterprise environments with SSL/TLS inspection proxies (e.g., corporate firewalls, Zscaler, Netskope, or internal PKI gateways), outbound requests to GitHub APIs may encounter certificate trust failures:
+```
+Error: self-signed certificate in certificate chain
+```
+
+`fluffy-sniffle` provides first-class configuration options to handle enterprise environments securely across both Node HTTPS and Undici/`fetch` client paths:
+
+### 1. Custom CA Certificate Bundle (Recommended for Enterprise)
+Export your corporate root and intermediate CA certificates to a `.pem` bundle file and configure `GITHUB_CA_CERT_PATH` in `.env`:
+```env
+GITHUB_CA_CERT_PATH=C:/certs/corporate-root-ca.pem
+```
+The client automatically loads the bundle into the underlying `https.Agent` and assigns `NODE_EXTRA_CA_CERTS`.
+
+### 2. Insecure TLS Mode (Local Diagnostics & Troubleshooting Only)
+For temporary local debugging or staging sandbox tests:
+```env
+GITHUB_ALLOW_INSECURE_TLS=true
+```
+> [!WARNING]
+> Insecure TLS mode bypasses server certificate verification (`NODE_TLS_REJECT_UNAUTHORIZED='0'`). Use exclusively for local troubleshooting. It must **never** be enabled in production environments.
+
+### 3. Credential Safety & Logging
+- **Masked Token Output:** Token presence is logged only in masked format (`ghp_****...abcd`). Plaintext secrets are never emitted to logs or stdout.
+- **Placeholder Detection:** If `.env` contains template defaults (e.g., `your_github_pat_token_here`), a descriptive warning is logged and the application safely falls back to the unauthenticated public REST API.
+- **Clear Repository Logging:** Every fetch, scan, success, and error message outputs the full GitHub URL (`https://github.com/<owner>/<repo>`) for immediate traceability.
 
 ---
 
